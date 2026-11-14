@@ -1,283 +1,181 @@
 # Teralur Backend (dki-be)
 
-Backend layanan kepegawaian guru Sudin Pendidikan DKI, dibangun di atas Go Gin Clean Starter (dokumentasi template ada di bawah).
+Backend layanan kepegawaian guru untuk Suku Dinas (Sudin) Pendidikan DKI Jakarta. Saat ini mencakup akun dan peran, data sekolah dan pendidik, dokumen, notifikasi, dan pengajuan cuti.
 
-## Menjalankan dengan Docker
+Dibangun dengan Go (Gin, GORM), PostgreSQL, Garage (penyimpanan berkas yang kompatibel dengan S3), dan nginx. Semuanya dijalankan lewat Docker.
+
+## Yang perlu dipasang
+
+- **Docker**: Docker Desktop (Windows/macOS) atau Docker Engine dengan Compose v2 (Linux). Pastikan Docker sudah berjalan sebelum lanjut.
+- **Git**
+
+Go tidak perlu dipasang untuk menjalankan aplikasi lewat Docker.
+
+## Mulai cepat
+
+**1. Ambil kode**
+
+```bash
+git clone https://github.com/dki-kepegawaian/dki-be.git
+cd dki-be
+```
+
+**2. Jalankan**
 
 ```bash
 docker compose up -d --build
 ```
 
-Perintah itu menyalakan Postgres, Garage (penyimpanan berkas), dan aplikasi. Migrasi dan seeder jalan otomatis setiap container start.
+Pertama kali butuh beberapa menit karena Docker mengunduh image dan membangun aplikasi. Setelah itu hanya beberapa detik. Tabel database dan data awal dibuat otomatis, jadi tidak perlu membuat file `.env` atau menjalankan perintah lain.
 
-- API: `http://localhost:81` lewat nginx. Port app `8888`, Postgres `5434`, dan Garage `3900` hanya terbuka di `127.0.0.1` (untuk pengembangan di mesin yang sama).
-- Dokumentasi API (Scalar): `http://localhost:8888/docs`
-- Admin awal: `admin@teralur.test` / `admin12345`
-- Akun contoh (karena `SEED_DEMO=true`): `staf.jb@teralur.test`, `operator.smpn45@teralur.test`, dst., password `teralur123`
-
-Tanpa `.env`, compose memakai nilai default untuk pengembangan. Untuk server sungguhan, salin `.env.example` ke `.env`, ganti semua rahasia (`JWT_SECRET`, `ADMIN_PASSWORD`, `DB_PASS`, `S3_*`, `GARAGE_*`), dan set `SEED_DEMO=false`. Juga set `APP_ENV=production` supaya `/docs` mati. Aplikasi menolak start bila `JWT_SECRET` kosong atau kurang dari 16 karakter.
-
-Untuk pengembangan dengan `go run`, nyalakan hanya Postgres dan Garage (`docker compose up -d postgres garage`), salin `.env.example` ke `.env`, lalu jalankan `make migrate-seed` dan `make run`.
-
-## Catatan
-
-- **Akun:** tidak ada pendaftaran mandiri. Staf Sudin mengelola akun lewat `/api/akun` (tambah, ubah, nonaktifkan, ganti password).
-- **Berkas:** disimpan di Garage (bucket privat), diunduh lewat `/api/dokumen/{id}` dengan cek akses.
-- **Dokumentasi API:** [docs/openapi.yaml](docs/openapi.yaml). Perbarui setiap kali menambah atau mengubah endpoint.
-- **ERD dan alur status:** [docs/ERD.md](docs/ERD.md)
-
----
-
-# Golang Gin Clean Starter
-
-You can join in the development (Open Source). **Let's Go!!!**
-
-[![Go Report Card](https://goreportcard.com/badge/github.com/Caknoooo/go-gin-clean-starter)](https://goreportcard.com/report/github.com/Caknoooo/go-gin-clean-starter) [![Go Reference](https://pkg.go.dev/badge/github.com/Caknoooo/go-gin-clean-starter.svg)](https://pkg.go.dev/github.com/Caknoooo/go-gin-clean-starter) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Release](https://img.shields.io/badge/release-v2.2.0-green.svg)](https://github.com/Caknoooo/go-gin-clean-starter/releases) <img align="right" width="200" height="200" alt="Go Gin Clean Architecture" src="https://github.com/user-attachments/assets/b7e2f353-bb6b-4ef1-88e9-6ab9bf2b8327" />
-
-[![Go Version](https://img.shields.io/badge/Go-%3E%3D%201.20-blue.svg)](https://golang.org/) [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-%3E%3D%2015.0-blue.svg)](https://www.postgresql.org/) [![Docker](https://img.shields.io/badge/Docker-Supported-blue.svg)](https://www.docker.com/) [![Gin](https://img.shields.io/badge/Gin-Web%20Framework-red.svg)](https://gin-gonic.com/) [![GORM](https://img.shields.io/badge/GORM-ORM-green.svg)](https://gorm.io/)
-
-## Introduction 👋
-> This project implements **Clean Architecture** principles with the Controller–Service–Repository pattern. This approach emphasizes clear separation of responsibilities across different layers in Golang applications. The architecture helps keep the codebase clean, testable, and scalable by dividing application logic into distinct modules with well-defined boundaries.
-
-<img width="1485" height="610" alt="Image" src="https://github.com/user-attachments/assets/918adf6d-9dc4-47fa-b9a6-3a10ca1e5242" />
-
-## Quick Start 🚀
-
-### Prerequisites
-- Go Version `>= go 1.20`
-- PostgreSQL Version `>= version 15.0`
-
-### Installation
-1. Clone the repository or **Use This Template**
-   ```bash
-   git clone https://github.com/Caknoooo/go-gin-clean-starter.git
-   ```
-2. Navigate to the project directory:
-   ```bash
-   cd go-gin-clean-starter
-   ```
-3. Copy the example environment file and configure it:
-   ```bash 
-   cp .env.example .env
-   ```
-4. Install dependencies:
-   ```bash
-   make dep
-   ```
-
-## Running the Application 🏃‍♂️
-
-There are two ways to run the application:
-
-### Option 1: With Docker
-1. Configure `.env` with your PostgreSQL credentials:
-   ```bash
-   DB_HOST=localhost
-   DB_USER=postgres
-   DB_PASS=your_password
-   DB_NAME=your_database
-   DB_PORT=5432
-   ```
-2. Build and start Docker containers:
-   ```bash
-   make init-docker
-   ```
-3. Run migrations and seeders:
-   ```bash
-   make migrate-seed-docker
-   ```
-4. The application will be available at `http://localhost:<port>`
-
-**Docker Migration Commands:**
-```bash
-make migrate-docker                                 # Run migrations in Docker
-make migrate-status-docker                          # Show migration status in Docker
-make migrate-rollback-docker                        # Rollback last batch in Docker
-make migrate-rollback-batch-docker batch=<number>   # Rollback batch in Docker
-make migrate-rollback-all-docker                    # Rollback all in Docker
-make migrate-create-docker name=<name>              # Create migration in Docker
-```
-
-### Option 2: Without Docker
-1. Configure `.env` with your PostgreSQL credentials:
-   ```bash
-   DB_HOST=localhost
-   DB_USER=postgres
-   DB_PASS=your_password
-   DB_NAME=your_database
-   DB_PORT=5432
-   ```
-2. Run the application:
-   ```bash
-   make migrate      # Run migrations
-   make seed         # Run seeders (optional)
-   make migrate-seed # Run Migrations + Seeder
-   make run          # Start the application
-   ```
-
-## Available Make Commands 🚀
-The project includes a comprehensive Makefile with the following commands:
-
-### Development Commands
-```bash
-make dep          # Install and tidy dependencies
-make run          # Run the application locally
-make build        # Build the application binary
-make run-build    # Build and run the application
-```
-
-### Migration Commands
-```bash
-make migrate                                # Run all pending migrations
-make migrate-status                         # Show migration status
-make migrate-rollback                       # Rollback the last batch
-make migrate-rollback-batch batch=<number>  # Rollback specific batch
-make migrate-rollback-all                   # Rollback all migrations
-make migrate-create name=<migration_name>   # Create new migration file
-```
-
-**Migration Examples:**
-```bash
-make migrate                                 # Run migrations
-make migrate-status                          # Check migration status
-make migrate-rollback                        # Rollback last batch
-make migrate-rollback-batch batch=2          # Rollback batch 2
-make migrate-rollback-all                    # Rollback all migrations
-make migrate-create name=create_posts_table  # Create migration with entity
-```
-
-**Note:** When creating a migration with format `create_*_table`, the system will automatically:
-- Create the entity file in `database/entities/`
-- Add the entity to the migration file
-- Add the entity to `database/migration.go` AutoMigrate section
-
-### Module Generation Commands
-```bash
-make module name=<module_name>  # Generate a new module with all necessary files
-```
-
-**Example:**
-```bash
-make module name=product
-```
-
-This command will automatically create a complete module structure including:
-- Controller (`product_controller.go`)
-- Service (`product_service.go`) 
-- Repository (`product_repository.go`)
-- DTO (`product_dto.go`)
-- Validation (`product_validation.go`)
-- Routes (`routes.go`)
-- Test files for all components
-- Query directory (for custom queries)
-
-## Advanced Usage 🔧
-
-### Running Migrations, Seeders, and Scripts
-You can run migrations, seed the database, and execute scripts while keeping the application running:
+**3. Cek hasilnya**
 
 ```bash
-go run cmd/main.go --migrate:run --seed --run --script:example_script
+docker compose ps
 ```
 
-**Available flags:**
-- `--migrate` or `--migrate:run`: Apply all pending migrations
-- `--migrate:status`: Show migration status
-- `--migrate:rollback`: Rollback the last batch
-- `--migrate:rollback <batch_number>`: Rollback specific batch
-- `--migrate:rollback:all`: Rollback all migrations
-- `--migrate:create:<migration_name>`: Create new migration file
-- `--seed`: Seed the database with initial data
-- `--script:example_script`: Run the specified script (replace `example_script` with your script name)
-- `--run`: Keep the application running after executing the commands above
+Empat layanan (`app`, `postgres`, `garage`, `nginx`) harus berstatus `Up`. Lalu buka dokumentasi API di <http://localhost:81/docs>.
 
-### Individual Commands
+## Login pertama
 
-#### Database Migration
+Akun berikut dibuat otomatis. Semua akun contoh memakai password `teralur123`, kecuali admin.
+
+| Peran | Email | Password |
+|---|---|---|
+| admin | `admin@teralur.test` | `admin12345` |
+| staf Sudin (Jakarta Barat) | `staf.jb@teralur.test` | `teralur123` |
+| pimpinan (Jakarta Barat) | `pimpinan.jb@teralur.test` | `teralur123` |
+| operator SMP Negeri 45 | `operator.smpn45@teralur.test` | `teralur123` |
+| operator SD Negeri Rawa Buaya 09 | `operator.sdnrawabuaya09@teralur.test` | `teralur123` |
+| staf Sudin (Jakarta Selatan) | `staf.js@teralur.test` | `teralur123` |
+
+Akun contoh hanya ada selama `SEED_DEMO=true` (bawaan). Tidak ada pendaftaran mandiri: akun dibuat oleh staf Sudin atau admin lewat `/api/akun`.
+
+**Mencoba API dari halaman `/docs`:**
+
+1. Buka `POST /api/auth/login`, klik **Test Request**, isi email dan password, lalu kirim.
+2. Salin `access_token` dari respons.
+3. Di panel **Authentication** (Bearer Token), tempel token itu. Sekarang endpoint lain bisa dicoba.
+
+Access token berlaku 15 menit. Setelah itu ambil token baru lewat `POST /api/auth/refresh` dengan `refresh_token` dari respons login.
+
+Alur cuti: operator sekolah mengajukan, staf Sudin memeriksa berkas, staf menandai surat fisik diterima, lalu staf mencatat keputusan. Penjelasan tiap langkah ada di tag **Cuti** pada halaman `/docs`.
+
+## Perintah sehari-hari
+
+| Perintah | Fungsi |
+|---|---|
+| `docker compose ps` | Lihat status layanan |
+| `docker compose logs -f app` | Lihat log aplikasi (keluar dengan Ctrl+C) |
+| `docker compose up -d --build` | Terapkan perubahan kode (membangun ulang aplikasi) |
+| `docker compose restart app` | Mulai ulang aplikasi saja |
+| `docker compose down` | Hentikan semua layanan. Data tetap tersimpan |
+| `docker compose down -v` | Hentikan dan **hapus semua data** (database dan berkas), kembali ke kondisi awal |
+| `docker compose exec app /app/teralur --migrate:status` | Lihat migrasi yang sudah berjalan |
+| `docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'` | Masuk ke database |
+
+Pengguna Git Bash di Windows: awali perintah `exec` dengan `MSYS_NO_PATHCONV=1`, kalau tidak, Git Bash mengubah `/app/...` menjadi path Windows. PowerShell dan CMD tidak punya masalah ini.
+
+Data disimpan di volume Docker (`postgres-data`, `garage-meta`, `garage-data`) dan bertahan walau layanan dihentikan.
+
+## Layanan dan port
+
+| Layanan | Fungsi | Alamat dari komputer Anda |
+|---|---|---|
+| nginx | Pintu masuk, batas unggahan 12 MB | <http://localhost:81> (bisa diakses dari jaringan) |
+| app | API Go | <http://127.0.0.1:8888> (hanya komputer ini) |
+| postgres | Database | `127.0.0.1:5434` (hanya komputer ini) |
+| garage | Penyimpanan berkas (S3) | `127.0.0.1:3900` (hanya komputer ini) |
+
+Postgres memakai port 5434 supaya tidak bentrok dengan Postgres lain di port 5432.
+
+## Mengubah konfigurasi
+
+Tanpa file `.env`, Docker Compose memakai nilai bawaan untuk pengembangan. Untuk mengubahnya, salin contohnya, edit, lalu jalankan ulang `docker compose up -d`:
+
 ```bash
-go run cmd/main.go --migrate:run                        # Run all pending migrations
-go run cmd/main.go --migrate:status                     # Show migration status
-go run cmd/main.go --migrate:rollback                   # Rollback last batch
-go run cmd/main.go --migrate:rollback 2                 # Rollback batch 2
-go run cmd/main.go --migrate:rollback:all               # Rollback all migrations
-go run cmd/main.go --migrate:create:create_posts_table  # Create migration
+cp .env.example .env              # PowerShell: Copy-Item .env.example .env
 ```
 
-**Migration System Features:**
-- **Batch-based migrations**: Similar to Laravel, migrations are grouped in batches
-- **Automatic entity creation**: When creating migration with format `create_*_table`, the system will:
-  - Automatically create entity file in `database/entities/`
-  - Add entity to migration file's AutoMigrate
-  - Add entity to `database/migration.go` AutoMigrate section
-- **Rollback support**: Rollback by batch or rollback all migrations
-- **Status tracking**: View which migrations have been run and their batch numbers
+| Variabel | Fungsi | Bawaan |
+|---|---|---|
+| `NGINX_PORT` | Port nginx di komputer Anda | `81` |
+| `GOLANG_PORT` | Port langsung ke aplikasi | `8888` |
+| `DB_PORT` | Port Postgres di komputer Anda | `5434` |
+| `S3_HOST_PORT` | Port Garage di komputer Anda (tidak ada di `.env.example`, tambahkan sendiri bila perlu) | `3900` |
+| `DB_USER`, `DB_PASS`, `DB_NAME` | Akses database | `teralur` |
+| `JWT_SECRET` | Kunci penandatangan token. Wajib, minimal 16 karakter | nilai contoh |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Admin awal | `admin@teralur.test`, `admin12345` |
+| `SEED_DEMO` | `true` membuat sekolah, pendidik, dan akun contoh | `true` |
+| `APP_ENV` | `production` mematikan halaman `/docs` | `localhost` |
+| `DOCS_ENABLED` | `true` menyalakan `/docs` walau `APP_ENV=production` | `false` |
+| `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN` | Rahasia Garage | nilai contoh |
 
-#### Database Seeding
+**Penting:** sebagian nilai hanya dibaca saat pertama kali dibuat.
+
+- Postgres hanya membaca `DB_USER`, `DB_PASS`, dan `DB_NAME` saat volume database dibuat.
+- Admin hanya dibuat satu kali, jadi mengubah `ADMIN_EMAIL` atau `ADMIN_PASSWORD` sesudahnya tidak mengubah admin yang sudah ada.
+- Perlakukan kunci S3 dan rahasia Garage dengan cara yang sama.
+
+Kalau mengubah nilai-nilai itu setelah stack pernah dijalankan, jalankan `docker compose down -v` dulu (menghapus data), baru `docker compose up -d --build`.
+
+## Untuk server sungguhan
+
+Nilai bawaan (password admin, password database, kunci S3, `JWT_SECRET`) tertulis di repo ini dan hanya untuk pengembangan. Sebelum dipakai di server:
+
+1. Salin `.env.example` ke `.env`, lalu ganti semua rahasia:
+   - `JWT_SECRET` dan `GARAGE_RPC_SECRET`: `openssl rand -hex 32`
+   - `S3_ACCESS_KEY`: `GK` diikuti 24 karakter hex (`echo GK$(openssl rand -hex 12)`)
+   - `S3_SECRET_KEY`: `openssl rand -hex 32`
+   - `ADMIN_PASSWORD`, `DB_PASS`, `GARAGE_ADMIN_TOKEN`: password acak yang panjang
+2. Set `SEED_DEMO=false` dan `APP_ENV=production`.
+3. Jalankan pertama kali dengan volume yang masih kosong. Volume yang pernah dibuat dengan nilai bawaan tetap menyimpan password lama dan akun contoh. Kalau ada, hapus dengan `docker compose down -v` (menghapus data).
+4. Pasang HTTPS di depan nginx. nginx di repo ini hanya melayani HTTP.
+5. Cukup buka satu port ke luar, yaitu port nginx. Port 8888, 5434, dan 3900 sudah dibatasi ke `127.0.0.1`. Tetap atur firewall server.
+6. Cadangkan volume `postgres-data`, `garage-meta`, dan `garage-data`.
+
+## Mengembangkan kode
+
+**Semua di Docker.** Ubah kode, lalu jalankan `docker compose up -d --build app`.
+
+**Aplikasi lewat `go run`** (butuh Go 1.26 atau lebih baru). Cara ini lebih cepat untuk mencoba perubahan. Docker hanya menjalankan database dan penyimpanan berkas:
+
 ```bash
-go run cmd/main.go --seed
-```
-This command will populate the database with initial data using the seeders defined in your application.
-
-#### Script Execution
-```bash
-go run cmd/main.go --script:example_script
-```
-Replace `example_script` with the actual script name in **script.go** at the script folder.
-
-> **Note:** If you need the application to continue running after performing migrations, seeding, or executing a script, always append the `--run` option.
-
-
-## Logs Feature 📋
-
-The application includes a built-in logging system that allows you to monitor and track system queries. You can access the logs through a modern, user-friendly interface.
-
-### Accessing Logs
-To view the logs:
-1. Make sure the application is running
-2. Open your browser and navigate to:
-```bash
-http://your-domain/logs
+docker compose up -d postgres garage
+cp .env.example .env              # PowerShell: Copy-Item .env.example .env
+go run cmd/main.go --migrate:run --seed --run
 ```
 
-![Logs Interface](https://github.com/user-attachments/assets/adda0afb-a1e4-4e05-b44e-87225fe63309)
+Jangan menjalankan layanan `app` Docker bersamaan, karena sama-sama memakai port 8888.
 
-### Features
-- **Monthly Filtering**: Filter logs by selecting different months
-- **Real-time Refresh**: Instantly refresh logs with the refresh button
-- **Expandable Entries**: Click on any log entry to view its full content
-- **Modern UI**: Clean and responsive interface with glass-morphism design
+Jalankan tes dengan `go test ./...`. File migrasi ada di `database/migrations/` dan dijalankan otomatis setiap aplikasi start. Setelah menambah atau mengubah endpoint, perbarui `docs/openapi.yaml` (file ini ikut dibangun ke dalam aplikasi, jadi build ulang agar `/docs` ikut berubah).
 
-## 📖 Documentation
+Struktur folder:
 
-### API Documentation
-Explore the available endpoints and their usage in the [Postman Documentation](https://documenter.getpostman.com/view/29665461/2s9YJaZQCG). This documentation provides a comprehensive overview of the API endpoints, including request and response examples.
+```
+cmd/          titik masuk aplikasi
+modules/      satu folder per fitur (routes, controller, service, repository, dto)
+database/     entitas, migrasi, dan data awal
+middlewares/  autentikasi, otorisasi, batas ukuran request
+pkg/          kode bersama (aturan akses, penyimpanan berkas, helper)
+docker/       Dockerfile, konfigurasi nginx dan Garage
+docs/         spesifikasi OpenAPI dan ERD
+```
 
-### Contributing
-We welcome contributions! The repository includes templates for issues and pull requests to standardize contributions and improve the quality of discussions and code reviews.
+## Kalau ada masalah
 
-- **Issue Template**: Helps in reporting bugs or suggesting features by providing a structured format
-- **Pull Request Template**: Guides contributors to provide clear descriptions of changes and testing steps
+| Gejala | Penyebab dan solusi |
+|---|---|
+| `error during connect ... dockerDesktopLinuxEngine` | Docker belum berjalan. Buka Docker Desktop, tunggu siap, ulangi perintahnya |
+| `port is already allocated` atau `address already in use` | Port dipakai program lain. Ubah `NGINX_PORT`, `GOLANG_PORT`, `DB_PORT`, atau `S3_HOST_PORT` di `.env` |
+| Aplikasi terus restart | Lihat `docker compose logs app`. Penyebab umum: `JWT_SECRET` kosong atau kurang dari 16 karakter |
+| Aplikasi tidak bisa terhubung ke database setelah mengganti `DB_PASS` | Postgres masih memakai password lama di volumenya. Jalankan `docker compose down -v`, lalu `docker compose up -d --build` |
+| Ingin mulai dari nol | `docker compose down -v` lalu `docker compose up -d --build` |
+| Unggahan berkas ditolak | Berkas harus PDF, JPG, atau PNG dengan ukuran maksimal 10 MB |
 
-## 🤝 Contributing
+## Dokumentasi lain
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- Dokumentasi API: <http://localhost:81/docs> saat aplikasi berjalan, sumbernya [docs/openapi.yaml](docs/openapi.yaml)
+- Tabel database dan alur status cuti: [docs/ERD.md](docs/ERD.md)
 
-## 🌟 Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Caknoooo/go-gin-clean-starter&type=date&legend=top-left)](https://www.star-history.com/#Caknoooo/go-gin-clean-starter&type=date&legend=top-left)
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [Gin Web Framework](https://gin-gonic.com/)
-- [GORM](https://gorm.io/)
-- [Samber/do](https://github.com/samber/do) for dependency injection
-- [Go Playground Validator](https://github.com/go-playground/validator)
-- [Testify](https://github.com/stretchr/testify) for testing
+Proyek ini berawal dari [Go Gin Clean Starter](https://github.com/Caknoooo/go-gin-clean-starter) oleh Caknoooo (lisensi MIT, lihat [LICENSE](LICENSE)).

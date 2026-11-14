@@ -5,13 +5,14 @@ import (
 
 	"github.com/Caknoooo/go-gin-clean-starter/modules/user/dto"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/user/repository"
+	"github.com/Caknoooo/go-gin-clean-starter/pkg/helpers"
+	"github.com/Caknoooo/go-gin-clean-starter/pkg/utils"
 	"gorm.io/gorm"
 )
 
 type UserService interface {
 	GetUserById(ctx context.Context, userId string) (dto.UserResponse, error)
-	Update(ctx context.Context, req dto.UserUpdateRequest, userId string) (dto.UserUpdateResponse, error)
-	Delete(ctx context.Context, userId string) error
+	GantiPassword(ctx context.Context, userId string, req dto.GantiPasswordRequest) error
 }
 
 type userService struct {
@@ -19,14 +20,8 @@ type userService struct {
 	db             *gorm.DB
 }
 
-func NewUserService(
-	userRepo repository.UserRepository,
-	db *gorm.DB,
-) UserService {
-	return &userService{
-		userRepository: userRepo,
-		db:             db,
-	}
+func NewUserService(userRepo repository.UserRepository, db *gorm.DB) UserService {
+	return &userService{userRepository: userRepo, db: db}
 }
 
 func (s *userService) GetUserById(ctx context.Context, userId string) (dto.UserResponse, error) {
@@ -34,49 +29,20 @@ func (s *userService) GetUserById(ctx context.Context, userId string) (dto.UserR
 	if err != nil {
 		return dto.UserResponse{}, err
 	}
-
-	return dto.UserResponse{
-		ID:         user.ID.String(),
-		Name:       user.Name,
-		Email:      user.Email,
-		TelpNumber: user.TelpNumber,
-		Role:       user.Role,
-		ImageUrl:   user.ImageUrl,
-		IsVerified: user.IsVerified,
-	}, nil
+	return dto.FromEntity(user), nil
 }
 
-func (s *userService) Update(ctx context.Context, req dto.UserUpdateRequest, userId string) (dto.UserUpdateResponse, error) {
+func (s *userService) GantiPassword(ctx context.Context, userId string, req dto.GantiPasswordRequest) error {
 	user, err := s.userRepository.GetUserById(ctx, s.db, userId)
 	if err != nil {
-		return dto.UserUpdateResponse{}, dto.ErrUserNotFound
+		return err
 	}
-
-	if req.Name != "" {
-		user.Name = req.Name
+	if ok, _ := helpers.CheckPassword(user.Password, []byte(req.PasswordLama)); !ok {
+		return utils.ErrBadRequest("password lama salah")
 	}
-	if req.Email != "" {
-		user.Email = req.Email
-	}
-	if req.TelpNumber != "" {
-		user.TelpNumber = req.TelpNumber
-	}
-
-	updatedUser, err := s.userRepository.Update(ctx, s.db, user)
+	hash, err := helpers.HashPassword(req.PasswordBaru)
 	if err != nil {
-		return dto.UserUpdateResponse{}, err
+		return err
 	}
-
-	return dto.UserUpdateResponse{
-		ID:         updatedUser.ID.String(),
-		Name:       updatedUser.Name,
-		TelpNumber: updatedUser.TelpNumber,
-		Role:       updatedUser.Role,
-		Email:      updatedUser.Email,
-		IsVerified: updatedUser.IsVerified,
-	}, nil
-}
-
-func (s *userService) Delete(ctx context.Context, userId string) error {
-	return s.userRepository.Delete(ctx, s.db, userId)
+	return s.userRepository.UpdatePassword(ctx, s.db, userId, hash)
 }

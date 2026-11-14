@@ -1,48 +1,97 @@
+# Jalankan semua layanan: docker compose up -d --build
+# Nilai default di bawah hanya untuk pengembangan lokal. Untuk server sungguhan,
+# isi .env (salin dari .env.example) dengan rahasia baru.
+name: teralur
+
+x-db: &db
+  DB_USER: ${DB_USER:-teralur}
+  DB_PASS: ${DB_PASS:-teralur}
+  DB_NAME: ${DB_NAME:-teralur}
+
 services:
   app:
     build:
       context: .
       dockerfile: ./docker/Dockerfile
-    container_name: ${APP_NAME:-go-gin-clean-starter}-app
-    volumes:
-      - .:/app
+    restart: unless-stopped
+    environment:
+      <<: *db
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      APP_ENV: ${APP_ENV:-localhost}
+      GOLANG_PORT: "8888"
+      JWT_SECRET: ${JWT_SECRET:-dev-ganti-dengan-rahasia-panjang}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@teralur.test}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+      SEED_DEMO: ${SEED_DEMO:-true}
+      DOCS_ENABLED: ${DOCS_ENABLED:-false}
+      S3_ENDPOINT: garage:3900
+      S3_REGION: garage
+      S3_USE_SSL: "false"
+      S3_BUCKET: ${S3_BUCKET:-teralur}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-GK0123456789abcdef01234567}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
     ports:
       - ${GOLANG_PORT:-8888}:8888
-    networks:
-      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      garage:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-teralur}
+      POSTGRES_PASSWORD: ${DB_PASS:-teralur}
+      POSTGRES_DB: ${DB_NAME:-teralur}
+    ports:
+      # Port host 5434 supaya tidak bentrok dengan Postgres lokal di 5432.
+      - ${DB_PORT:-5434}:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  garage:
+    image: dxflrs/garage:v2.5.0
+    restart: unless-stopped
+    # --single-node membuat layout otomatis; --default-bucket membuat bucket + key dari env GARAGE_DEFAULT_*.
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-1f0b6c3a9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:-dev-garage-admin-token}
+      GARAGE_DEFAULT_BUCKET: ${S3_BUCKET:-teralur}
+      GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY:-GK0123456789abcdef01234567}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+    ports:
+      # S3 API dibuka ke host hanya untuk pengembangan (go run lokal).
+      - ${S3_HOST_PORT:-3900}:3900
+    volumes:
+      - ./docker/garage/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   nginx:
-    image: nginx:latest
-    container_name: ${APP_NAME:-go-gin-clean-starter}-nginx
+    image: nginx:1.29-alpine
+    restart: unless-stopped
     ports:
       - ${NGINX_PORT:-81}:80
     volumes:
-      - .:/var/www/html
-      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - app
-    networks:
-      - app-network
-
-  postgres:
-    hostname: postgres
-    container_name: ${APP_NAME:-go-gin-clean-starter}-db
-    image: postgres:latest
-    ports:
-      - ${DB_PORT}:5432
-    volumes:
-      - ./docker/postgresql/tmp:/var/lib/postgresql/data
-      - app-data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASS}
-      - POSTGRES_DB=${DB_NAME}
-    networks:
-      - app-network
 
 volumes:
-  app-data:
-
-networks:
-  app-network:
-    driver: bridge
+  postgres-data:
+  garage-meta:
+  garage-data:

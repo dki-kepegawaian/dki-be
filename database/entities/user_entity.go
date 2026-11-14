@@ -8,14 +8,20 @@ import (
 )
 
 type User struct {
-	ID         uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	Name       string    `gorm:"type:varchar(100);not null" json:"name"`
-	Email      string    `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
-	TelpNumber string    `gorm:"type:varchar(20);index" json:"telp_number"`
-	Password   string    `gorm:"type:varchar(255);not null" json:"password"`
-	Role       string    `gorm:"type:varchar(50);not null;default:'user'" json:"role"`
-	ImageUrl   string    `gorm:"type:varchar(255)" json:"image_url"`
-	IsVerified bool      `gorm:"default:false" json:"is_verified"`
+	ID         uuid.UUID  `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	Name       string     `gorm:"type:varchar(100);not null" json:"name"`
+	Email      string     `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
+	TelpNumber string     `gorm:"type:varchar(20);index" json:"telp_number"`
+	Password   string     `gorm:"type:varchar(255);not null" json:"-"`
+	Role       string     `gorm:"type:varchar(50);not null;default:'user'" json:"role"`
+	ImageUrl   string     `gorm:"type:varchar(255)" json:"image_url"`
+	IsVerified bool       `gorm:"default:false" json:"is_verified"`
+	IsAktif    bool       `gorm:"not null;default:true" json:"is_aktif"` // false = dinonaktifkan Sudin, tidak bisa login
+	SudinID    *uuid.UUID `gorm:"type:uuid;index" json:"sudin_id"`
+	SekolahID  *uuid.UUID `gorm:"type:uuid;index" json:"sekolah_id"`
+
+	Sudin   *Sudin   `gorm:"foreignKey:SudinID" json:"sudin,omitempty"`
+	Sekolah *Sekolah `gorm:"foreignKey:SekolahID" json:"sekolah,omitempty"`
 
 	Timestamp
 }

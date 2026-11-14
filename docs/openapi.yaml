@@ -1,0 +1,1048 @@
+openapi: 3.1.0
+info:
+  title: Teralur API
+  version: 0.1.0
+  description: |
+    Backend layanan kepegawaian guru Sudin Pendidikan DKI (Teralur v0.9).
+    Cakupan saat ini: fondasi (akun, sekolah, pendidik, dokumen, notifikasi) dan modul Cuti.
+
+    **Peran**
+    - `staf_sudin`: memeriksa dan memproses pengajuan di sekolah wilayah Sudin-nya.
+    - `operator_sekolah`: mengajukan dan memantau pengajuan untuk guru di sekolahnya.
+    - `pimpinan`: melihat data di wilayah Sudin-nya (baca saja).
+    - `admin`: akses semua data.
+
+    **Autentikasi**: tidak ada pendaftaran mandiri; akun dibuat Sudin lewat `/api/akun`.
+    Login lewat `POST /api/auth/login`, lalu kirim `Authorization: Bearer <access_token>`.
+    Access token berlaku 15 menit; perbarui lewat `POST /api/auth/refresh`.
+
+    **Akun bawaan Docker**: admin `admin@teralur.test` / `admin12345` (dari `ADMIN_EMAIL`/`ADMIN_PASSWORD`).
+    Dengan `SEED_DEMO=true` tersedia juga (password `teralur123`): `staf.jb@teralur.test`, `pimpinan.jb@teralur.test`,
+    `operator.smpn45@teralur.test`, `operator.sdnrawabuaya09@teralur.test`, `staf.js@teralur.test`.
+servers:
+  - url: /
+    description: Server yang sedang menyajikan dokumentasi ini
+tags:
+  - name: Auth
+  - name: Akun Saya
+  - name: Manajemen Akun
+    description: |
+      Akun dikelola Sudin. `staf_sudin` mengelola akun operator sekolah di wilayahnya dan sesama staf Sudin-nya;
+      akun `pimpinan` dan `admin` hanya dikelola `admin`. Menghapus akun = menonaktifkan (riwayat tetap utuh).
+  - name: Sekolah
+  - name: Pendidik
+  - name: Dokumen
+  - name: Notifikasi
+  - name: Cuti
+    description: |
+      Alur (Figma C1–C6): operator **ajukan** → Sudin **periksa** berkas digital →
+      (jika kurang: operator **perbaikan**) → Sudin **terima surat fisik** + nota dinas →
+      tanda tangan basah pejabat (di luar sistem) → Sudin **catat keputusan**.
+
+      Status: `diajukan`, `perlu_perbaikan`, `menunggu_surat_fisik`, `diproses_sudin`, `disetujui`, `ditolak`.
+security:
+  - bearerAuth: []
+
+paths:
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Masuk
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, example: staf.jb@teralur.test }
+                password: { type: string, example: teralur123 }
+      responses:
+        "200":
+          description: Berhasil masuk
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Token" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401":
+          description: Email atau password salah
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Akun dinonaktifkan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Perbarui access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          description: Token baru
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Token" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Keluar (hapus semua refresh token akun)
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /api/user/me:
+    get:
+      tags: [Akun Saya]
+      summary: Akun yang sedang login
+      responses:
+        "200":
+          description: Data akun
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /api/user/me/password:
+    put:
+      tags: [Akun Saya]
+      summary: Ganti password sendiri
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password_lama, password_baru]
+              properties:
+                password_lama: { type: string }
+                password_baru: { type: string, minLength: 8, maxLength: 72 }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/akun:
+    get:
+      tags: [Manajemen Akun]
+      summary: Daftar akun di wilayah Sudin
+      description: Hanya `staf_sudin` dan `admin`. Staf melihat operator sekolah di wilayahnya serta staf dan pimpinan Sudin-nya.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: search
+          in: query
+          description: Nama atau email (sebagian)
+          schema: { type: string }
+        - name: role
+          in: query
+          schema: { $ref: "#/components/schemas/Role" }
+        - name: sekolah_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: aktif
+          in: query
+          schema: { type: string, enum: ["true", "false"] }
+      responses:
+        "200":
+          description: Daftar akun
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/User" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Manajemen Akun]
+      summary: Tambah akun
+      description: |
+        `operator_sekolah` wajib `sekolah_id` (sekolah di wilayah Anda).
+        `staf_sudin`/`pimpinan` ditempatkan di Sudin pembuat; admin wajib mengisi `sudin_id`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, role, password]
+              properties:
+                name: { type: string, example: Dedi Kurniawan }
+                email: { type: string, format: email, example: operator.smpn45@teralur.test }
+                telp_number: { type: string }
+                role: { $ref: "#/components/schemas/Role" }
+                sekolah_id: { type: string, format: uuid }
+                sudin_id: { type: string, format: uuid, description: Hanya dipakai admin }
+                password: { type: string, minLength: 8, maxLength: 72 }
+      responses:
+        "201":
+          description: Akun dibuat
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/akun/{id}:
+    get:
+      tags: [Manajemen Akun]
+      summary: Detail akun
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Akun
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/User" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Manajemen Akun]
+      summary: Ubah akun (kirim semua kolom)
+      description: "`is_aktif: true` juga dipakai untuk mengaktifkan kembali akun yang dinonaktifkan."
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, role, is_aktif]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                telp_number: { type: string }
+                role: { $ref: "#/components/schemas/Role" }
+                sekolah_id: { type: string, format: uuid }
+                sudin_id: { type: string, format: uuid }
+                is_aktif: { type: boolean }
+      responses:
+        "200":
+          description: Akun diubah
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Manajemen Akun]
+      summary: Nonaktifkan akun
+      description: Akun tidak bisa login dan semua sesinya dicabut. Data dan riwayatnya tetap tersimpan.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/akun/{id}/password:
+    put:
+      tags: [Manajemen Akun]
+      summary: Ganti password akun lain
+      description: Semua sesi akun tersebut dicabut, jadi pemiliknya harus login ulang dengan password baru.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password_baru]
+              properties:
+                password_baru: { type: string, minLength: 8, maxLength: 72 }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/sekolah:
+    get:
+      tags: [Sekolah]
+      summary: Daftar sekolah sesuai scope peran
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: search
+          in: query
+          description: Nama sekolah (sebagian) atau NPSN (persis)
+          schema: { type: string }
+        - name: jenjang
+          in: query
+          schema: { type: string, enum: [SD, SMP, SMA, SMK, SLB] }
+      responses:
+        "200":
+          description: Daftar sekolah
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Sekolah" }
+
+  /api/sekolah/{id}:
+    get:
+      tags: [Sekolah]
+      summary: Detail sekolah
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Sekolah
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Sekolah" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/pendidik:
+    get:
+      tags: [Pendidik]
+      summary: Daftar pendidik sesuai scope peran
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: search
+          in: query
+          description: Nama (sebagian) atau awalan NIP
+          schema: { type: string }
+        - name: sekolah_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status_kepegawaian
+          in: query
+          schema: { $ref: "#/components/schemas/StatusKepegawaian" }
+      responses:
+        "200":
+          description: Daftar pendidik
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Pendidik" }
+    post:
+      tags: [Pendidik]
+      summary: Tambah pendidik
+      description: Hanya `staf_sudin` (untuk sekolah di wilayahnya) dan `admin`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PendidikRequest" }
+      responses:
+        "201":
+          description: Pendidik dibuat
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Pendidik" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/pendidik/{id}:
+    get:
+      tags: [Pendidik]
+      summary: Detail pendidik
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Pendidik
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Pendidik" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Pendidik]
+      summary: Ubah pendidik (kirim semua kolom)
+      description: Hanya `staf_sudin` dan `admin`.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PendidikRequest" }
+      responses:
+        "200":
+          description: Pendidik diubah
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Pendidik" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/dokumen/{id}:
+    get:
+      tags: [Dokumen]
+      summary: Unduh dokumen
+      description: |
+        Hanya pengunggah, akun di sekolah pemilik dokumen, atau staf/pimpinan Sudin yang membawahi sekolah tersebut.
+        Dokumen di luar akses dijawab 404.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: inline
+          in: query
+          description: "`1` untuk ditampilkan di browser (pratinjau), bukan diunduh"
+          schema: { type: string, enum: ["1"] }
+      responses:
+        "200":
+          description: Isi berkas
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/notifikasi:
+    get:
+      tags: [Notifikasi]
+      summary: Notifikasi milik akun yang login
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: belum_dibaca
+          in: query
+          description: "`1` untuk hanya yang belum dibaca"
+          schema: { type: string, enum: ["1"] }
+      responses:
+        "200":
+          description: Daftar notifikasi
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      belum_dibaca: { type: integer, description: Jumlah notifikasi belum dibaca (untuk badge) }
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Notifikasi" }
+
+  /api/notifikasi/{id}/baca:
+    post:
+      tags: [Notifikasi]
+      summary: Tandai satu notifikasi dibaca
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/notifikasi/baca-semua:
+    post:
+      tags: [Notifikasi]
+      summary: Tandai semua notifikasi dibaca
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+
+  /api/cuti:
+    get:
+      tags: [Cuti]
+      summary: Daftar pengajuan cuti (antrean Sudin / status sekolah)
+      description: |
+        Staf Sudin dan Pimpinan melihat sekolah di wilayahnya; Operator hanya sekolahnya.
+        Tab di layar C6: Perlu Perbaikan = `status=perlu_perbaikan`,
+        Dalam proses = `status=diajukan,menunggu_surat_fisik,diproses_sudin`, Selesai = `status=disetujui,ditolak`.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: status
+          in: query
+          description: Satu atau beberapa status dipisah koma
+          schema: { type: string, example: "diajukan,perlu_perbaikan" }
+        - name: jenis
+          in: query
+          schema: { $ref: "#/components/schemas/JenisCuti" }
+        - name: sekolah_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          description: Nomor registrasi, nama guru, atau awalan NIP
+          schema: { type: string }
+      responses:
+        "200":
+          description: Daftar cuti, terbaru dulu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Cuti" }
+    post:
+      tags: [Cuti]
+      summary: Ajukan cuti guru (C1)
+      description: |
+        Hanya `operator_sekolah`, untuk pendidik di sekolahnya. Diisi setelah permohonan disetujui Kepala Sekolah.
+        Validasi: tanggal selesai ≥ mulai, ada hari kerja, tidak bertumpuk dengan pengajuan lain yang belum ditolak,
+        dan untuk cuti tahunan tidak melebihi sisa jatah 12 hari kerja.
+        Staf Sudin di wilayah sekolah mendapat notifikasi.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [pendidik_id, jenis, tanggal_mulai, tanggal_selesai, alasan, disetujui_kepsek, berkas]
+              properties:
+                pendidik_id: { type: string, format: uuid }
+                jenis: { $ref: "#/components/schemas/JenisCuti" }
+                tanggal_mulai: { type: string, format: date, example: "2026-11-03" }
+                tanggal_selesai: { type: string, format: date, example: "2026-11-07" }
+                alasan: { type: string, maxLength: 1000 }
+                disetujui_kepsek:
+                  type: boolean
+                  description: Harus `true`, permohonan sudah ditandatangani Kepala Sekolah
+                berkas:
+                  type: string
+                  format: binary
+                  description: Surat permohonan bertanda tangan (PDF/JPG/PNG, maks 10 MB)
+      responses:
+        "201":
+          description: Pengajuan terkirim, status `diajukan`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Cuti" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/cuti/ringkasan:
+    get:
+      tags: [Cuti]
+      summary: Jumlah pengajuan per status (kartu antrean Q1)
+      responses:
+        "200":
+          description: Jumlah per status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: { type: integer }
+                        example:
+                          diajukan: 3
+                          perlu_perbaikan: 1
+                          menunggu_surat_fisik: 2
+                          diproses_sudin: 1
+                          disetujui: 12
+                          ditolak: 0
+
+  /api/cuti/sisa-tahunan:
+    get:
+      tags: [Cuti]
+      summary: Sisa cuti tahunan seorang pendidik
+      description: Jatah 12 hari kerja dikurangi cuti tahunan yang belum ditolak. Libur nasional dan akumulasi tahun lalu belum dihitung.
+      parameters:
+        - name: pendidik_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: tahun
+          in: query
+          description: Default tahun berjalan
+          schema: { type: integer, example: 2026 }
+      responses:
+        "200":
+          description: Sisa cuti
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          pendidik_id: { type: string, format: uuid }
+                          tahun: { type: integer }
+                          jatah: { type: integer, example: 12 }
+                          terpakai: { type: integer, example: 3 }
+                          sisa: { type: integer, example: 9 }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/cuti/{id}:
+    get:
+      tags: [Cuti]
+      summary: Detail pengajuan cuti beserta riwayat status
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Cuti" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/cuti/{id}/perbaikan:
+    post:
+      tags: [Cuti]
+      summary: Unggah ulang berkas (operator)
+      description: Hanya saat status `perlu_perbaikan`. Status kembali ke `diajukan`.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [berkas]
+              properties:
+                berkas: { type: string, format: binary }
+                alasan: { type: string, description: Opsional, mengganti alasan lama }
+      responses:
+        "200":
+          description: Perbaikan terkirim
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Cuti" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/cuti/{id}/periksa:
+    post:
+      tags: [Cuti]
+      summary: Simpan hasil periksa berkas digital (C3)
+      description: |
+        Hanya saat status `diajukan`. Jika lengkap dan terbaca → `menunggu_surat_fisik`;
+        selain itu → `perlu_perbaikan` dan `catatan` wajib diisi. Operator mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [berkas_lengkap, berkas_terbaca]
+              properties:
+                berkas_lengkap: { type: boolean }
+                berkas_terbaca: { type: boolean }
+                catatan:
+                  type: string
+                  example: Halaman 2 (tanda tangan Kepala Sekolah) buram. Mohon pindai ulang minimal 200 dpi.
+      responses:
+        "200":
+          description: Hasil tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Cuti" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/cuti/terima-surat-fisik:
+    post:
+      tags: [Cuti]
+      summary: Tandai surat fisik + nota dinas diterima (C4, bisa banyak sekaligus)
+      description: |
+        Semua pengajuan harus berstatus `menunggu_surat_fisik`; jika satu gagal, tidak ada yang tersimpan.
+        `nota_dinas_ada` harus `true`. Status menjadi `diproses_sudin`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cuti_ids, tanggal_diterima, nota_dinas_ada]
+              properties:
+                cuti_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { type: string, format: uuid }
+                tanggal_diterima: { type: string, format: date, example: "2026-10-28" }
+                penerima_id:
+                  type: string
+                  format: uuid
+                  description: Staf Sudin penerima di loket. Default akun yang login.
+                nota_dinas_ada: { type: boolean }
+                catatan: { type: string }
+      responses:
+        "200":
+          description: Penerimaan tercatat
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          diterima:
+                            type: array
+                            items: { type: string, example: CUT-2026-0142 }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/cuti/{id}/keputusan:
+    post:
+      tags: [Cuti]
+      summary: Catat keputusan pejabat (C5)
+      description: Hanya saat status `diproses_sudin`. Keputusan final dan tidak bisa diubah.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [keputusan, nomor_surat_izin, tanggal_surat_izin, surat_izin]
+              properties:
+                keputusan: { type: string, enum: [disetujui, ditolak] }
+                nomor_surat_izin: { type: string, example: 800.1.11.3/1287/SDP.I/XI/2026 }
+                tanggal_surat_izin: { type: string, format: date, example: "2026-10-30" }
+                surat_izin: { type: string, format: binary, description: Hasil pindai surat bertanda tangan basah }
+                catatan: { type: string, example: Surat asli dapat diambil di loket mulai 3 Nov }
+      responses:
+        "200":
+          description: Keputusan tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Cuti" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+
+  responses:
+    Ok:
+      description: Berhasil
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Response" }
+    Error:
+      description: Gagal. `error` berisi alasan yang bisa ditampilkan ke pengguna.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  schemas:
+    Response:
+      type: object
+      properties:
+        status: { type: boolean, example: true }
+        message: { type: string }
+        data: {}
+    ErrorResponse:
+      type: object
+      properties:
+        status: { type: boolean, example: false }
+        message: { type: string, example: gagal mengajukan cuti }
+        error: { type: string, example: sisa cuti tahunan 2026 hanya 2 hari kerja }
+    Paginated:
+      type: object
+      properties:
+        code: { type: integer, example: 200 }
+        status: { type: string, example: success }
+        message: { type: string }
+        data: { type: array, items: {} }
+        pagination:
+          type: object
+          properties:
+            page: { type: integer }
+            per_page: { type: integer }
+            max_page: { type: integer }
+            total: { type: integer }
+
+    Token:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+
+    Role:
+      type: string
+      enum: [staf_sudin, operator_sekolah, pimpinan, admin]
+
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        telp_number: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        is_aktif: { type: boolean }
+        sudin_id: { type: [string, "null"], format: uuid }
+        sudin_nama: { type: string, example: Jakarta Barat }
+        sekolah_id: { type: [string, "null"], format: uuid }
+        sekolah_nama: { type: string, example: SMP Negeri 45 Jakarta }
+
+    Sudin:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kode: { type: string, example: JB }
+        nama: { type: string, example: Jakarta Barat }
+
+    Sekolah:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        sudin_id: { type: string, format: uuid }
+        npsn: { type: string, example: "20101045" }
+        nama: { type: string, example: SMP Negeri 45 Jakarta }
+        jenjang: { type: string, enum: [SD, SMP, SMA, SMK, SLB] }
+        kecamatan: { type: string, example: Kebon Jeruk }
+        alamat: { type: string }
+        sudin: { $ref: "#/components/schemas/Sudin" }
+
+    StatusKepegawaian:
+      type: string
+      enum: [PNS, PPPK, PPPK_PW, KKI]
+
+    PendidikRequest:
+      type: object
+      required: [sekolah_id, nama, status_kepegawaian]
+      properties:
+        sekolah_id: { type: string, format: uuid }
+        nama: { type: string, example: "Siti Rahmawati, S.Pd." }
+        nip: { type: [string, "null"], pattern: "^[0-9]{18}$", example: "198706142010012015" }
+        nik: { type: string, pattern: "^[0-9]{16}$" }
+        nuptk: { type: string, pattern: "^[0-9]{16}$" }
+        nrk: { type: string }
+        nikki: { type: string }
+        status_kepegawaian: { $ref: "#/components/schemas/StatusKepegawaian" }
+        pangkat: { type: string, example: Penata }
+        golongan: { type: string, example: III/c }
+        jabatan: { type: string, example: Guru Mapel }
+        jabatan_dapodik: { type: string, example: IPA }
+        program_studi: { type: string }
+        sertifikasi: { type: string }
+        email: { type: string, format: email }
+        telepon: { type: string }
+        alamat_domisili: { type: string }
+        kota_domisili: { type: string }
+
+    Pendidik:
+      allOf:
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            sekolah: { $ref: "#/components/schemas/Sekolah" }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+        - $ref: "#/components/schemas/PendidikRequest"
+
+    Notifikasi:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        judul: { type: string, example: Berkas cuti perlu perbaikan }
+        pesan: { type: string }
+        tautan: { type: string, example: /cuti/5c2f6a8e-0000-0000-0000-000000000000 }
+        dibaca_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+
+    JenisCuti:
+      type: string
+      enum: [tahunan, besar, sakit, melahirkan, alasan_penting, di_luar_tanggungan_negara]
+
+    StatusCuti:
+      type: string
+      enum: [diajukan, perlu_perbaikan, menunggu_surat_fisik, diproses_sudin, disetujui, ditolak]
+
+    Dokumen:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nama_asli: { type: string, example: Permohonan_cuti_Siti_Rahmawati.pdf }
+        mime_type: { type: string, example: application/pdf }
+        ukuran: { type: integer, example: 1258291 }
+        url: { type: string, example: /api/dokumen/5c2f6a8e-0000-0000-0000-000000000000 }
+
+    Cuti:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nomor: { type: string, example: CUT-2026-0142 }
+        status: { $ref: "#/components/schemas/StatusCuti" }
+        jenis: { $ref: "#/components/schemas/JenisCuti" }
+        tanggal_mulai: { type: string, format: date }
+        tanggal_selesai: { type: string, format: date }
+        hari_kerja: { type: integer, example: 5 }
+        alasan: { type: string }
+        disetujui_kepsek: { type: boolean }
+        pendidik:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            nama: { type: string }
+            nip: { type: [string, "null"] }
+            status_kepegawaian: { $ref: "#/components/schemas/StatusKepegawaian" }
+            pangkat: { type: string }
+            golongan: { type: string }
+            jabatan: { type: string }
+        sekolah:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            npsn: { type: string }
+            nama: { type: string }
+        berkas_permohonan: { $ref: "#/components/schemas/Dokumen" }
+        berkas_lengkap: { type: [boolean, "null"] }
+        berkas_terbaca: { type: [boolean, "null"] }
+        catatan_perbaikan: { type: string }
+        diperiksa_at: { type: [string, "null"], format: date-time }
+        surat_fisik_diterima_tanggal: { type: [string, "null"], format: date }
+        surat_fisik_penerima_nama: { type: string }
+        nota_dinas_ada: { type: [boolean, "null"] }
+        catatan_penerimaan: { type: string }
+        nomor_surat_izin: { type: string }
+        tanggal_surat_izin: { type: [string, "null"], format: date }
+        surat_izin: { $ref: "#/components/schemas/Dokumen" }
+        catatan_keputusan: { type: string }
+        diputuskan_at: { type: [string, "null"], format: date-time }
+        riwayat:
+          type: array
+          description: Hanya di endpoint detail, urut dari yang terlama
+          items:
+            type: object
+            properties:
+              dari_status: { type: string }
+              ke_status: { $ref: "#/components/schemas/StatusCuti" }
+              oleh: { type: string, format: uuid }
+              oleh_nama: { type: string }
+              catatan: { type: string }
+              created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }

@@ -1,0 +1,32 @@
+{
+  "sudin": [
+    { "kode": "JB", "nama": "Jakarta Barat" },
+    { "kode": "JP", "nama": "Jakarta Pusat" },
+    { "kode": "JS", "nama": "Jakarta Selatan" },
+    { "kode": "JT", "nama": "Jakarta Timur" },
+    { "kode": "JU", "nama": "Jakarta Utara" }
+  ],
+  "sekolah": [
+    { "sudin_kode": "JB", "npsn": "20101436", "nama": "SD Negeri Rawa Buaya 09", "jenjang": "SD", "kecamatan": "Cengkareng" },
+    { "sudin_kode": "JB", "npsn": "20101512", "nama": "SD Negeri Kembangan Selatan 05", "jenjang": "SD", "kecamatan": "Kembangan" },
+    { "sudin_kode": "JB", "npsn": "20101045", "nama": "SMP Negeri 45 Jakarta", "jenjang": "SMP", "kecamatan": "Kebon Jeruk" },
+    { "sudin_kode": "JB", "npsn": "20101016", "nama": "SMA Negeri 16 Jakarta", "jenjang": "SMA", "kecamatan": "Palmerah" },
+    { "sudin_kode": "JB", "npsn": "20101013", "nama": "SMK Negeri 13 Jakarta", "jenjang": "SMK", "kecamatan": "Kembangan" },
+    { "sudin_kode": "JS", "npsn": "20102001", "nama": "SMP Negeri 1 Jakarta Selatan", "jenjang": "SMP", "kecamatan": "Kebayoran Baru" }
+  ],
+  "pendidik": [
+    { "sekolah_npsn": "20101045", "nama": "Siti Rahmawati, S.Pd.", "nip": "198706142010012015", "status_kepegawaian": "PNS", "pangkat": "Penata", "golongan": "III/c", "jabatan": "Guru Mapel", "jabatan_dapodik": "IPA" },
+    { "sekolah_npsn": "20101045", "nama": "Ni Made Ayu Kusumawardhani, S.Pd., M.Pd.", "nip": "198009152005012011", "status_kepegawaian": "PNS", "pangkat": "Pembina", "golongan": "IV/a", "jabatan": "Guru Mapel", "jabatan_dapodik": "Bahasa Indonesia" },
+    { "sekolah_npsn": "20101436", "nama": "Rahmat Hidayat", "nip": "199103122020121008", "status_kepegawaian": "PNS", "pangkat": "Penata Muda", "golongan": "III/a", "jabatan": "Guru Kelas", "jabatan_dapodik": "Pendidikan Agama Islam dan Budi Pekerti", "nrk": "201845" },
+    { "sekolah_npsn": "20101013", "nama": "Dewi Anggraini, S.Pd.Gr.", "nip": "199009212015032004", "status_kepegawaian": "PNS", "pangkat": "Penata Muda Tk. I", "golongan": "III/b", "jabatan": "Guru Mapel", "jabatan_dapodik": "Bahasa Inggris" },
+    { "sekolah_npsn": "20101016", "nama": "Yohanes Siregar", "nip": "199001052022211012", "status_kepegawaian": "PPPK", "golongan": "IX", "jabatan": "Guru Mapel", "jabatan_dapodik": "Matematika" },
+    { "sekolah_npsn": "20101512", "nama": "Nur Aini Fitriani", "status_kepegawaian": "PPPK_PW", "jabatan": "Guru Kelas" }
+  ],
+  "users": [
+    { "name": "Bimo Rajendra", "email": "staf.jb@teralur.test", "password": "teralur123", "role": "staf_sudin", "sudin_kode": "JB" },
+    { "name": "Kepala Sudin Jakarta Barat", "email": "pimpinan.jb@teralur.test", "password": "teralur123", "role": "pimpinan", "sudin_kode": "JB" },
+    { "name": "Dedi Kurniawan", "email": "operator.smpn45@teralur.test", "password": "teralur123", "role": "operator_sekolah", "sekolah_npsn": "20101045" },
+    { "name": "Operator SDN Rawa Buaya 09", "email": "operator.sdnrawabuaya09@teralur.test", "password": "teralur123", "role": "operator_sekolah", "sekolah_npsn": "20101436" },
+    { "name": "Staf Sudin Jakarta Selatan", "email": "staf.js@teralur.test", "password": "teralur123", "role": "staf_sudin", "sudin_kode": "JS" }
+  ]
+}

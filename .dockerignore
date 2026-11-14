@@ -1,0 +1,13 @@
+.git
+.github
+.env
+*.env
+storage/
+assets/
+volumes/
+docker/postgresql/
+docker/air/
+config/logs/
+logs.html
+*.exe
+main

@@ -1,3 +1,33 @@
+# Teralur Backend (dki-be)
+
+Backend layanan kepegawaian guru Sudin Pendidikan DKI, dibangun di atas Go Gin Clean Starter (dokumentasi template ada di bawah).
+
+## Menjalankan dengan Docker
+
+```bash
+docker compose up -d --build
+```
+
+Perintah itu menyalakan Postgres, Garage (penyimpanan berkas), dan aplikasi. Migrasi dan seeder jalan otomatis setiap container start.
+
+- API: `http://localhost:8888` (lewat nginx: `http://localhost:81`)
+- Dokumentasi API (Scalar): `http://localhost:8888/docs`
+- Admin awal: `admin@teralur.test` / `admin12345`
+- Akun contoh (karena `SEED_DEMO=true`): `staf.jb@teralur.test`, `operator.smpn45@teralur.test`, dst., password `teralur123`
+
+Tanpa `.env`, compose memakai nilai default untuk pengembangan. Untuk server sungguhan, salin `.env.example` ke `.env`, ganti semua rahasia (`JWT_SECRET`, `ADMIN_PASSWORD`, `DB_PASS`, `S3_*`, `GARAGE_*`), dan set `SEED_DEMO=false`.
+
+Untuk pengembangan dengan `go run`, nyalakan hanya Postgres dan Garage (`docker compose up -d postgres garage`), salin `.env.example` ke `.env`, lalu jalankan `make migrate-seed` dan `make run`.
+
+## Catatan
+
+- **Akun:** tidak ada pendaftaran mandiri. Staf Sudin mengelola akun lewat `/api/akun` (tambah, ubah, nonaktifkan, ganti password).
+- **Berkas:** disimpan di Garage (bucket privat), diunduh lewat `/api/dokumen/{id}` dengan cek akses.
+- **Dokumentasi API:** [docs/openapi.yaml](docs/openapi.yaml). Perbarui setiap kali menambah atau mengubah endpoint.
+- **ERD dan alur status:** [docs/ERD.md](docs/ERD.md)
+
+---
+
 # Golang Gin Clean Starter
 
 You can join in the development (Open Source). **Let's Go!!!**

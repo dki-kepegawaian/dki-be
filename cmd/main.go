@@ -5,7 +5,14 @@ import (
 	"os"
 
 	"github.com/Caknoooo/go-gin-clean-starter/middlewares"
+	"github.com/Caknoooo/go-gin-clean-starter/docs"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/akun"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/auth"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/cuti"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/dokumen"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/notifikasi"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/pendidik"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/sekolah"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/user"
 	"github.com/Caknoooo/go-gin-clean-starter/providers"
 	"github.com/Caknoooo/go-gin-clean-starter/script"
@@ -64,6 +71,15 @@ func main() {
 	// Register module routes
 	user.RegisterRoutes(server, injector)
 	auth.RegisterRoutes(server, injector)
+	akun.RegisterRoutes(server, injector)
+	sekolah.RegisterRoutes(server, injector)
+	pendidik.RegisterRoutes(server, injector)
+	dokumen.RegisterRoutes(server, injector)
+	notifikasi.RegisterRoutes(server, injector)
+	cuti.RegisterRoutes(server, injector)
+
+	// Dokumentasi API (Scalar) di /docs
+	docs.RegisterRoutes(server)
 
 	run(server)
 }

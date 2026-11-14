@@ -15,10 +15,9 @@ func RunExtension(db *gorm.DB) {
 }
 
 func SetUpDatabaseConnection() *gorm.DB {
-	err := godotenv.Load(".env")
-	if err != nil {
-		panic(err)
-	}
+	// .env opsional: di Docker konfigurasi datang dari environment container.
+	// godotenv tidak menimpa variabel yang sudah ada di environment.
+	_ = godotenv.Load(".env")
 
 	dbUser := os.Getenv("DB_USER")
 	dbPass := os.Getenv("DB_PASS")

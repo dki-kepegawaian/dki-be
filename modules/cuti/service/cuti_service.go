@@ -94,6 +94,9 @@ func (s *cutiService) Ajukan(ctx context.Context, actor entities.User, req dto.A
 	if selesai.Before(mulai) {
 		return dto.CutiResponse{}, utils.ErrBadRequest("tanggal selesai tidak boleh sebelum tanggal mulai")
 	}
+	if selesai.After(mulai.AddDate(3, 0, 0)) {
+		return dto.CutiResponse{}, utils.ErrBadRequest("rentang cuti maksimal 3 tahun")
+	}
 	hari := helpers.HariKerja(mulai, selesai)
 	if hari == 0 {
 		return dto.CutiResponse{}, utils.ErrBadRequest("rentang tanggal tidak mencakup hari kerja")
@@ -234,7 +237,11 @@ func (s *cutiService) Periksa(ctx context.Context, actor entities.User, id strin
 		if err := s.catatTransisi(ctx, tx, actor, &c, ke, "cuti.periksa", catatan); err != nil {
 			return err
 		}
-		return s.notifikasi.Kirim(ctx, tx, []uuid.UUID{c.DiajukanOleh}, judul, pesan, tautan(c.ID))
+		penerima, err := s.repo.OperatorSekolah(ctx, tx, c.SekolahID)
+		if err != nil {
+			return err
+		}
+		return s.notifikasi.Kirim(ctx, tx, penerima, judul, pesan, tautan(c.ID))
 	})
 	if err != nil {
 		return dto.CutiResponse{}, err
@@ -289,7 +296,11 @@ func (s *cutiService) TerimaSuratFisik(ctx context.Context, actor entities.User,
 			if err := s.catatTransisi(ctx, tx, actor, &c, entities.CutiStatusDiprosesSudin, "cuti.terima_surat_fisik", c.CatatanPenerimaan); err != nil {
 				return err
 			}
-			if err := s.notifikasi.Kirim(ctx, tx, []uuid.UUID{c.DiajukanOleh}, "Surat fisik cuti diterima",
+			operator, err := s.repo.OperatorSekolah(ctx, tx, c.SekolahID)
+			if err != nil {
+				return err
+			}
+			if err := s.notifikasi.Kirim(ctx, tx, operator, "Surat fisik cuti diterima",
 				fmt.Sprintf("%s · Surat asli dan nota dinas diterima Sudin, menunggu tanda tangan pejabat.", c.Nomor), tautan(c.ID)); err != nil {
 				return err
 			}
@@ -331,7 +342,11 @@ func (s *cutiService) Putuskan(ctx context.Context, actor entities.User, id stri
 		if req.Keputusan == entities.CutiStatusDitolak {
 			judul = "Cuti ditolak"
 		}
-		return s.notifikasi.Kirim(ctx, tx, []uuid.UUID{c.DiajukanOleh}, judul,
+		operator, err := s.repo.OperatorSekolah(ctx, tx, c.SekolahID)
+		if err != nil {
+			return err
+		}
+		return s.notifikasi.Kirim(ctx, tx, operator, judul,
 			fmt.Sprintf("%s · %s · Surat %s", c.Nomor, c.Pendidik.Nama, c.NomorSuratIzin), tautan(c.ID))
 	})
 	if err != nil {

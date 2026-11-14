@@ -2,10 +2,12 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
+	"time"
 
-	"github.com/Caknoooo/go-gin-clean-starter/middlewares"
 	"github.com/Caknoooo/go-gin-clean-starter/docs"
+	"github.com/Caknoooo/go-gin-clean-starter/middlewares"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/akun"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/auth"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/cuti"
@@ -49,7 +51,15 @@ func run(server *gin.Engine) {
 	myFigure := figure.NewColorFigure("Caknoo", "", "green", true)
 	myFigure.Print()
 
-	if err := server.Run(serve); err != nil {
+	srv := &http.Server{
+		Addr:              serve,
+		Handler:           server,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("error running server: %v", err)
 	}
 }
@@ -66,6 +76,9 @@ func main() {
 	}
 
 	server := gin.Default()
+	server.MaxMultipartMemory = 8 << 20
+	// Batas body di aplikasi, tidak bergantung pada nginx: JSON 1 MiB, multipart 11 MiB (berkas maks 10 MB).
+	server.Use(middlewares.BatasiBody(1<<20, 11<<20))
 	server.Use(middlewares.CORSMiddleware())
 
 	// Register module routes

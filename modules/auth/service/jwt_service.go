@@ -34,7 +34,7 @@ type jwtService struct {
 func NewJWTService() JWTService {
 	return &jwtService{
 		secretKey:     getSecretKey(),
-		issuer:        "Template",
+		issuer:        "teralur",
 		accessExpiry:  time.Minute * 15,
 		refreshExpiry: time.Hour * 24 * 7,
 	}
@@ -42,8 +42,9 @@ func NewJWTService() JWTService {
 
 func getSecretKey() string {
 	secretKey := os.Getenv("JWT_SECRET")
-	if secretKey == "" {
-		secretKey = "Template"
+	if len(secretKey) < 16 {
+		// Gagal tertutup: tanpa secret yang layak, token bisa dipalsukan siapa pun.
+		log.Fatal("JWT_SECRET wajib diisi (minimal 16 karakter)")
 	}
 	return secretKey
 }
@@ -89,7 +90,16 @@ func (j *jwtService) parseToken(t_ *jwt.Token) (any, error) {
 }
 
 func (j *jwtService) ValidateToken(token string) (*jwt.Token, error) {
-	return jwt.Parse(token, j.parseToken)
+	t, err := jwt.ParseWithClaims(token, &jwtCustomClaim{}, j.parseToken)
+	if err != nil {
+		return nil, err
+	}
+	// exp tidak wajib di jwt v4, jadi diwajibkan di sini bersama issuer dan user_id.
+	c, ok := t.Claims.(*jwtCustomClaim)
+	if !ok || c.ExpiresAt == nil || c.Issuer != j.issuer || c.UserID == "" {
+		return nil, fmt.Errorf("token tidak valid")
+	}
+	return t, nil
 }
 
 func (j *jwtService) GetUserIDByToken(token string) (string, error) {
@@ -98,7 +108,5 @@ func (j *jwtService) GetUserIDByToken(token string) (string, error) {
 		return "", err
 	}
 
-	claims := tToken.Claims.(jwt.MapClaims)
-	id := fmt.Sprintf("%v", claims["user_id"])
-	return id, nil
+	return tToken.Claims.(*jwtCustomClaim).UserID, nil
 }

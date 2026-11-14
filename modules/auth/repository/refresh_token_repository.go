@@ -12,7 +12,8 @@ type RefreshTokenRepository interface {
 	Create(ctx context.Context, tx *gorm.DB, token entities.RefreshToken) (entities.RefreshToken, error)
 	FindByToken(ctx context.Context, tx *gorm.DB, token string) (entities.RefreshToken, error)
 	DeleteByUserID(ctx context.Context, tx *gorm.DB, userID string) error
-	DeleteByToken(ctx context.Context, tx *gorm.DB, token string) error
+	// DeleteByToken mengembalikan jumlah baris terhapus; 0 berarti token sudah dipakai request lain.
+	DeleteByToken(ctx context.Context, tx *gorm.DB, token string) (int64, error)
 	DeleteExpired(ctx context.Context, tx *gorm.DB) error
 }
 
@@ -70,16 +71,13 @@ func (r *refreshTokenRepository) DeleteByUserID(ctx context.Context, tx *gorm.DB
 	return nil
 }
 
-func (r *refreshTokenRepository) DeleteByToken(ctx context.Context, tx *gorm.DB, token string) error {
+func (r *refreshTokenRepository) DeleteByToken(ctx context.Context, tx *gorm.DB, token string) (int64, error) {
 	if tx == nil {
 		tx = r.db
 	}
 
-	if err := tx.WithContext(ctx).Where("token = ?", token).Delete(&entities.RefreshToken{}).Error; err != nil {
-		return err
-	}
-
-	return nil
+	res := tx.WithContext(ctx).Where("token = ?", token).Delete(&entities.RefreshToken{})
+	return res.RowsAffected, res.Error
 }
 
 func (r *refreshTokenRepository) DeleteExpired(ctx context.Context, tx *gorm.DB) error {

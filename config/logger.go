@@ -32,8 +32,10 @@ func SetupLogger() logger.Interface {
 		log.New(logFile, "\r\n", log.LstdFlags),
 		logger.Config{
 			SlowThreshold: time.Second,
-			LogLevel:      logger.Info,
+			LogLevel:      logger.Warn,
 			Colorful:      false,
+			// Jangan tulis nilai parameter (refresh token, hash password, NIK) ke file log.
+			ParameterizedQueries: true,
 		},
 	)
 

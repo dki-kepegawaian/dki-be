@@ -10,12 +10,12 @@ docker compose up -d --build
 
 Perintah itu menyalakan Postgres, Garage (penyimpanan berkas), dan aplikasi. Migrasi dan seeder jalan otomatis setiap container start.
 
-- API: `http://localhost:8888` (lewat nginx: `http://localhost:81`)
+- API: `http://localhost:81` lewat nginx. Port app `8888`, Postgres `5434`, dan Garage `3900` hanya terbuka di `127.0.0.1` (untuk pengembangan di mesin yang sama).
 - Dokumentasi API (Scalar): `http://localhost:8888/docs`
 - Admin awal: `admin@teralur.test` / `admin12345`
 - Akun contoh (karena `SEED_DEMO=true`): `staf.jb@teralur.test`, `operator.smpn45@teralur.test`, dst., password `teralur123`
 
-Tanpa `.env`, compose memakai nilai default untuk pengembangan. Untuk server sungguhan, salin `.env.example` ke `.env`, ganti semua rahasia (`JWT_SECRET`, `ADMIN_PASSWORD`, `DB_PASS`, `S3_*`, `GARAGE_*`), dan set `SEED_DEMO=false`.
+Tanpa `.env`, compose memakai nilai default untuk pengembangan. Untuk server sungguhan, salin `.env.example` ke `.env`, ganti semua rahasia (`JWT_SECRET`, `ADMIN_PASSWORD`, `DB_PASS`, `S3_*`, `GARAGE_*`), dan set `SEED_DEMO=false`. Juga set `APP_ENV=production` supaya `/docs` mati. Aplikasi menolak start bila `JWT_SECRET` kosong atau kurang dari 16 karakter.
 
 Untuk pengembangan dengan `go run`, nyalakan hanya Postgres dan Garage (`docker compose up -d postgres garage`), salin `.env.example` ke `.env`, lalu jalankan `make migrate-seed` dan `make run`.
 

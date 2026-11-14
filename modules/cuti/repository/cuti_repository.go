@@ -29,6 +29,8 @@ type CutiRepository interface {
 	AdaTumpangTindih(ctx context.Context, tx *gorm.DB, pendidikID uuid.UUID, mulai, selesai time.Time) (bool, error)
 	StafSudinSekolah(ctx context.Context, tx *gorm.DB, sekolahID uuid.UUID) ([]uuid.UUID, error)
 	StafSudinValid(ctx context.Context, tx *gorm.DB, userID uuid.UUID, sudinID uuid.UUID) (bool, error)
+	// OperatorSekolah mengembalikan operator aktif yang saat ini ditempatkan di sekolah tersebut.
+	OperatorSekolah(ctx context.Context, tx *gorm.DB, sekolahID uuid.UUID) ([]uuid.UUID, error)
 }
 
 type cutiRepository struct {
@@ -174,7 +176,7 @@ func (r *cutiRepository) AdaTumpangTindih(ctx context.Context, tx *gorm.DB, pend
 func (r *cutiRepository) StafSudinSekolah(ctx context.Context, tx *gorm.DB, sekolahID uuid.UUID) ([]uuid.UUID, error) {
 	var ids []uuid.UUID
 	err := r.tx(tx).WithContext(ctx).Model(&entities.User{}).
-		Where("role = ? AND sudin_id = (SELECT sudin_id FROM sekolah WHERE id = ?)", constants.ENUM_ROLE_STAF_SUDIN, sekolahID).
+		Where("role = ? AND is_aktif = true AND sudin_id = (SELECT sudin_id FROM sekolah WHERE id = ?)", constants.ENUM_ROLE_STAF_SUDIN, sekolahID).
 		Pluck("id", &ids).Error
 	return ids, err
 }
@@ -182,7 +184,15 @@ func (r *cutiRepository) StafSudinSekolah(ctx context.Context, tx *gorm.DB, seko
 func (r *cutiRepository) StafSudinValid(ctx context.Context, tx *gorm.DB, userID uuid.UUID, sudinID uuid.UUID) (bool, error) {
 	var n int64
 	err := r.tx(tx).WithContext(ctx).Model(&entities.User{}).
-		Where("id = ? AND role = ? AND sudin_id = ?", userID, constants.ENUM_ROLE_STAF_SUDIN, sudinID).
+		Where("id = ? AND role = ? AND sudin_id = ? AND is_aktif = true", userID, constants.ENUM_ROLE_STAF_SUDIN, sudinID).
 		Count(&n).Error
 	return n > 0, err
+}
+
+func (r *cutiRepository) OperatorSekolah(ctx context.Context, tx *gorm.DB, sekolahID uuid.UUID) ([]uuid.UUID, error) {
+	var ids []uuid.UUID
+	err := r.tx(tx).WithContext(ctx).Model(&entities.User{}).
+		Where("role = ? AND sekolah_id = ? AND is_aktif = true", constants.ENUM_ROLE_OPERATOR_SEKOLAH, sekolahID).
+		Pluck("id", &ids).Error
+	return ids, err
 }

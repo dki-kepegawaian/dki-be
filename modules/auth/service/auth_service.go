@@ -64,8 +64,13 @@ func (s *authService) RefreshToken(ctx context.Context, req dto.RefreshTokenRequ
 	if err != nil || rt.ExpiresAt.Before(time.Now()) {
 		return dto.TokenResponse{}, &utils.HTTPError{Status: 401, Message: "refresh token tidak berlaku"}
 	}
-	if err := s.refreshTokenRepository.DeleteByToken(ctx, s.db, req.RefreshToken); err != nil {
+	deleted, err := s.refreshTokenRepository.DeleteByToken(ctx, s.db, req.RefreshToken)
+	if err != nil {
 		return dto.TokenResponse{}, err
+	}
+	if deleted != 1 {
+		// Token sudah dikonsumsi request lain yang berjalan bersamaan.
+		return dto.TokenResponse{}, &utils.HTTPError{Status: 401, Message: "refresh token tidak berlaku"}
 	}
 	if !rt.User.IsAktif {
 		return dto.TokenResponse{}, utils.ErrForbidden("akun dinonaktifkan, hubungi Sudin")

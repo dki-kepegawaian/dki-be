@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"github.com/Caknoooo/go-gin-clean-starter/database/entities"
 
 	"github.com/Caknoooo/go-gin-clean-starter/modules/user/dto"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/user/repository"
@@ -44,5 +45,12 @@ func (s *userService) GantiPassword(ctx context.Context, userId string, req dto.
 	if err != nil {
 		return err
 	}
-	return s.userRepository.UpdatePassword(ctx, s.db, userId, hash)
+	// Cabut semua sesi (refresh token) supaya sesi yang mungkin dicuri tidak bertahan,
+	// sama seperti reset password oleh Sudin di modul akun.
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.userRepository.UpdatePassword(ctx, tx, userId, hash); err != nil {
+			return err
+		}
+		return tx.Where("user_id = ?", userId).Delete(&entities.RefreshToken{}).Error
+	})
 }

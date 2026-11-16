@@ -1,9 +1,11 @@
 package dto
 
 type (
+	// LoginRequest: isi username (layar L1) atau email.
 	LoginRequest struct {
-		Email    string `json:"email" binding:"required,email"`
-		Password string `json:"password" binding:"required"`
+		Username string `json:"username" binding:"omitempty,max=50"`
+		Email    string `json:"email" binding:"omitempty,email,max=255"`
+		Password string `json:"password" binding:"required,max=72"`
 	}
 
 	RefreshTokenRequest struct {

@@ -30,3 +30,21 @@ func TestHariKerja(t *testing.T) {
 		})
 	}
 }
+
+func TestTambahHariKerja(t *testing.T) {
+	cases := []struct {
+		dari string
+		n    int
+		want string
+	}{
+		{"2026-11-02", 2, "2026-11-04"}, // Senin + 2 = Rabu
+		{"2026-11-06", 1, "2026-11-09"}, // Jumat + 1 = Senin
+		{"2026-11-07", 1, "2026-11-09"}, // Sabtu + 1 = Senin
+		{"2026-11-02", 0, "2026-11-02"},
+	}
+	for _, c := range cases {
+		if got := TambahHariKerja(tgl(c.dari), c.n).Format("2006-01-02"); got != c.want {
+			t.Fatalf("TambahHariKerja(%s, %d) = %s, want %s", c.dari, c.n, got, c.want)
+		}
+	}
+}

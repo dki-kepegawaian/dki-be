@@ -15,6 +15,7 @@ type AkunRepository interface {
 	List(ctx context.Context, actor entities.User, f dto.Filter) ([]entities.User, int64, error)
 	GetByID(ctx context.Context, actor entities.User, id string) (entities.User, error)
 	EmailDipakai(ctx context.Context, email string, kecuali uuid.UUID) (bool, error)
+	UsernameDipakai(ctx context.Context, username string, kecuali uuid.UUID) (bool, error)
 	Create(ctx context.Context, u *entities.User) error
 	Save(ctx context.Context, tx *gorm.DB, u *entities.User) error
 	UpdatePassword(ctx context.Context, tx *gorm.DB, id uuid.UUID, hash string) error
@@ -80,6 +81,12 @@ func (r *akunRepository) GetByID(ctx context.Context, actor entities.User, id st
 	}
 	err := r.db.WithContext(ctx).Scopes(scope(actor)).Preload("Sudin").Preload("Sekolah").Take(&u, "users.id = ?", id).Error
 	return u, err
+}
+
+func (r *akunRepository) UsernameDipakai(ctx context.Context, username string, kecuali uuid.UUID) (bool, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&entities.User{}).Where("LOWER(username) = LOWER(?) AND id <> ?", username, kecuali).Count(&n).Error
+	return n > 0, err
 }
 
 func (r *akunRepository) EmailDipakai(ctx context.Context, email string, kecuali uuid.UUID) (bool, error) {

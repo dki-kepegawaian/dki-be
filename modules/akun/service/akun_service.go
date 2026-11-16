@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	"github.com/Caknoooo/go-gin-clean-starter/database/entities"
@@ -85,6 +86,30 @@ func (s *akunService) penempatan(ctx context.Context, actor entities.User, role,
 	}
 }
 
+var polaUsername = regexp.MustCompile(`^[a-z0-9._]{3,50}$`)
+
+// identitas menormalkan username dan NIP; username kosong/NIP kosong menjadi nil.
+func (s *akunService) identitas(ctx context.Context, username, nip string, kecuali uuid.UUID) (*string, *string, error) {
+	var u, n *string
+	if username = strings.ToLower(strings.TrimSpace(username)); username != "" {
+		if !polaUsername.MatchString(username) {
+			return nil, nil, utils.ErrBadRequest("username hanya boleh huruf kecil, angka, titik, dan garis bawah (3-50 karakter)")
+		}
+		dipakai, err := s.repo.UsernameDipakai(ctx, username, kecuali)
+		if err != nil {
+			return nil, nil, err
+		}
+		if dipakai {
+			return nil, nil, utils.ErrConflict("username sudah dipakai akun lain")
+		}
+		u = &username
+	}
+	if nip != "" {
+		n = &nip
+	}
+	return u, n, nil
+}
+
 func (s *akunService) cekEmail(ctx context.Context, email string, kecuali uuid.UUID) error {
 	dipakai, err := s.repo.EmailDipakai(ctx, email, kecuali)
 	if err != nil {
@@ -125,8 +150,12 @@ func (s *akunService) Tambah(ctx context.Context, actor entities.User, req dto.T
 	if err := s.cekEmail(ctx, email, uuid.Nil); err != nil {
 		return userDto.UserResponse{}, err
 	}
+	username, nip, err := s.identitas(ctx, req.Username, req.NIP, uuid.Nil)
+	if err != nil {
+		return userDto.UserResponse{}, err
+	}
 	u := entities.User{
-		Name: strings.TrimSpace(req.Name), Email: email, TelpNumber: req.TelpNumber,
+		Name: strings.TrimSpace(req.Name), Email: email, TelpNumber: req.TelpNumber, Username: username, NIP: nip,
 		Password: req.Password, // di-hash oleh hook BeforeCreate
 		Role:     req.Role, SekolahID: sekolahID, SudinID: sudinID, IsVerified: true, IsAktif: true,
 	}
@@ -158,9 +187,14 @@ func (s *akunService) Ubah(ctx context.Context, actor entities.User, id string, 
 	if err := s.cekEmail(ctx, email, u.ID); err != nil {
 		return userDto.UserResponse{}, err
 	}
+	username, nip, err := s.identitas(ctx, req.Username, req.NIP, u.ID)
+	if err != nil {
+		return userDto.UserResponse{}, err
+	}
 
 	err = s.repo.Transaction(ctx, func(tx *gorm.DB) error {
 		u.Name, u.Email, u.TelpNumber = strings.TrimSpace(req.Name), email, req.TelpNumber
+		u.Username, u.NIP = username, nip
 		u.Role, u.SekolahID, u.SudinID, u.IsAktif = req.Role, sekolahID, sudinID, *req.IsAktif
 		u.Sudin, u.Sekolah = nil, nil
 		if err := s.repo.Save(ctx, tx, &u); err != nil {

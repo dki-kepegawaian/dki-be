@@ -25,6 +25,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
       SEED_DEMO: ${SEED_DEMO:-true}
       DOCS_ENABLED: ${DOCS_ENABLED:-false}
+      PENGINGAT_TENGGAT: ${PENGINGAT_TENGGAT:-true}
       S3_ENDPOINT: garage:3900
       S3_REGION: garage
       S3_USE_SSL: "false"

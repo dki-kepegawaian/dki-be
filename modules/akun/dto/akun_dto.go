@@ -2,7 +2,10 @@ package dto
 
 type (
 	TambahRequest struct {
-		Name       string `json:"name" binding:"required,min=2,max=100"`
+		Name string `json:"name" binding:"required,min=2,max=100"`
+		// Username: 3-50 karakter huruf kecil, angka, titik, garis bawah (mis. bimo.rajendra). Opsional.
+		Username   string `json:"username" binding:"omitempty,min=3,max=50"`
+		NIP        string `json:"nip" binding:"omitempty,numeric,len=18"`
 		Email      string `json:"email" binding:"required,email,max=255"`
 		TelpNumber string `json:"telp_number" binding:"omitempty,max=20"`
 		Role       string `json:"role" binding:"required,oneof=staf_sudin operator_sekolah pimpinan admin"`
@@ -14,7 +17,10 @@ type (
 	}
 
 	UbahRequest struct {
-		Name       string `json:"name" binding:"required,min=2,max=100"`
+		Name string `json:"name" binding:"required,min=2,max=100"`
+		// Username: 3-50 karakter huruf kecil, angka, titik, garis bawah (mis. bimo.rajendra). Opsional.
+		Username   string `json:"username" binding:"omitempty,min=3,max=50"`
+		NIP        string `json:"nip" binding:"omitempty,numeric,len=18"`
 		Email      string `json:"email" binding:"required,email,max=255"`
 		TelpNumber string `json:"telp_number" binding:"omitempty,max=20"`
 		Role       string `json:"role" binding:"required,oneof=staf_sudin operator_sekolah pimpinan admin"`

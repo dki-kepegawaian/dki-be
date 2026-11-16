@@ -1,11 +1,17 @@
 package dto
 
-import "github.com/Caknoooo/go-gin-clean-starter/database/entities"
+import (
+	"time"
+
+	"github.com/Caknoooo/go-gin-clean-starter/database/entities"
+)
 
 type (
 	UserResponse struct {
 		ID          string  `json:"id"`
 		Name        string  `json:"name"`
+		Username    *string `json:"username"`
+		NIP         *string `json:"nip"`
 		Email       string  `json:"email"`
 		TelpNumber  string  `json:"telp_number"`
 		Role        string  `json:"role"`
@@ -16,6 +22,16 @@ type (
 		SekolahNama string  `json:"sekolah_nama,omitempty"`
 	}
 
+	RiwayatMasukResponse struct {
+		Waktu     time.Time `json:"waktu"`
+		Perangkat string    `json:"perangkat"`
+	}
+
+	KeluarSesiLainRequest struct {
+		// Refresh token sesi ini; semua refresh token lain milik akun dicabut.
+		RefreshToken string `json:"refresh_token" binding:"required,max=255"`
+	}
+
 	GantiPasswordRequest struct {
 		PasswordLama string `json:"password_lama" binding:"required"`
 		PasswordBaru string `json:"password_baru" binding:"required,min=8,max=72"`
@@ -24,7 +40,7 @@ type (
 
 func FromEntity(u entities.User) UserResponse {
 	r := UserResponse{
-		ID: u.ID.String(), Name: u.Name, Email: u.Email, TelpNumber: u.TelpNumber,
+		ID: u.ID.String(), Name: u.Name, Username: u.Username, NIP: u.NIP, Email: u.Email, TelpNumber: u.TelpNumber,
 		Role: u.Role, IsAktif: u.IsAktif,
 	}
 	if u.SudinID != nil {

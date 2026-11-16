@@ -1,6 +1,6 @@
 {
   "sudin": [
-    { "kode": "JB", "nama": "Jakarta Barat" },
+    { "kode": "JB", "nama": "Jakarta Barat", "kontak_unit": "Subbagian Umum dan Kepegawaian", "kontak_telepon": "(021) 5550 0145", "kontak_email": "kepegawaian.sudin@example.com", "jam_layanan": "Senin-Jumat, 08.00-16.00" },
     { "kode": "JP", "nama": "Jakarta Pusat" },
     { "kode": "JS", "nama": "Jakarta Selatan" },
     { "kode": "JT", "nama": "Jakarta Timur" },
@@ -9,7 +9,7 @@
   "sekolah": [
     { "sudin_kode": "JB", "npsn": "20101436", "nama": "SD Negeri Rawa Buaya 09", "jenjang": "SD", "kecamatan": "Cengkareng" },
     { "sudin_kode": "JB", "npsn": "20101512", "nama": "SD Negeri Kembangan Selatan 05", "jenjang": "SD", "kecamatan": "Kembangan" },
-    { "sudin_kode": "JB", "npsn": "20101045", "nama": "SMP Negeri 45 Jakarta", "jenjang": "SMP", "kecamatan": "Kebon Jeruk" },
+    { "sudin_kode": "JB", "npsn": "20101045", "nama": "SMP Negeri 45 Jakarta", "jenjang": "SMP", "kecamatan": "Kebon Jeruk", "kepala_sekolah": "Drs. Sutrisno Wibowo, M.Pd." },
     { "sudin_kode": "JB", "npsn": "20101016", "nama": "SMA Negeri 16 Jakarta", "jenjang": "SMA", "kecamatan": "Palmerah" },
     { "sudin_kode": "JB", "npsn": "20101013", "nama": "SMK Negeri 13 Jakarta", "jenjang": "SMK", "kecamatan": "Kembangan" },
     { "sudin_kode": "JS", "npsn": "20102001", "nama": "SMP Negeri 1 Jakarta Selatan", "jenjang": "SMP", "kecamatan": "Kebayoran Baru" }
@@ -23,10 +23,10 @@
     { "sekolah_npsn": "20101512", "nama": "Nur Aini Fitriani", "status_kepegawaian": "PPPK_PW", "jabatan": "Guru Kelas" }
   ],
   "users": [
-    { "name": "Bimo Rajendra", "email": "staf.jb@teralur.test", "password": "teralur123", "role": "staf_sudin", "sudin_kode": "JB" },
-    { "name": "Kepala Sudin Jakarta Barat", "email": "pimpinan.jb@teralur.test", "password": "teralur123", "role": "pimpinan", "sudin_kode": "JB" },
-    { "name": "Dedi Kurniawan", "email": "operator.smpn45@teralur.test", "password": "teralur123", "role": "operator_sekolah", "sekolah_npsn": "20101045" },
-    { "name": "Operator SDN Rawa Buaya 09", "email": "operator.sdnrawabuaya09@teralur.test", "password": "teralur123", "role": "operator_sekolah", "sekolah_npsn": "20101436" },
-    { "name": "Staf Sudin Jakarta Selatan", "email": "staf.js@teralur.test", "password": "teralur123", "role": "staf_sudin", "sudin_kode": "JS" }
+    { "name": "Bimo Rajendra", "email": "staf.jb@teralur.test", "password": "teralur123", "role": "staf_sudin", "sudin_kode": "JB", "username": "staf.jb" },
+    { "name": "Kepala Sudin Jakarta Barat", "email": "pimpinan.jb@teralur.test", "password": "teralur123", "role": "pimpinan", "sudin_kode": "JB", "username": "pimpinan.jb" },
+    { "name": "Dedi Kurniawan", "email": "operator.smpn45@teralur.test", "password": "teralur123", "role": "operator_sekolah", "sekolah_npsn": "20101045", "username": "operator.smpn45" },
+    { "name": "Operator SDN Rawa Buaya 09", "email": "operator.sdnrawabuaya09@teralur.test", "password": "teralur123", "role": "operator_sekolah", "sekolah_npsn": "20101436", "username": "operator.sdnrawabuaya09" },
+    { "name": "Staf Sudin Jakarta Selatan", "email": "staf.js@teralur.test", "password": "teralur123", "role": "staf_sudin", "sudin_kode": "JS", "username": "staf.js" }
   ]
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"github.com/Caknoooo/go-gin-clean-starter/pkg/aktivitas"
 	"time"
 
 	"github.com/Caknoooo/go-gin-clean-starter/database/entities"
@@ -16,7 +17,7 @@ import (
 
 // Akun dibuat oleh Sudin lewat modul akun; tidak ada pendaftaran mandiri.
 type AuthService interface {
-	Login(ctx context.Context, req dto.LoginRequest) (dto.TokenResponse, error)
+	Login(ctx context.Context, req dto.LoginRequest, perangkat string) (dto.TokenResponse, error)
 	RefreshToken(ctx context.Context, req dto.RefreshTokenRequest) (dto.TokenResponse, error)
 	Logout(ctx context.Context, userId string) error
 }
@@ -42,10 +43,19 @@ func NewAuthService(
 	}
 }
 
-var errKredensial = &utils.HTTPError{Status: 401, Message: "email atau password salah"}
+var errKredensial = &utils.HTTPError{Status: 401, Message: "nama pengguna/email atau password salah"}
 
-func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (dto.TokenResponse, error) {
-	user, err := s.userRepository.GetUserByEmail(ctx, s.db, req.Email)
+func (s *authService) Login(ctx context.Context, req dto.LoginRequest, perangkat string) (dto.TokenResponse, error) {
+	var user entities.User
+	var err error
+	switch {
+	case req.Username != "":
+		user, err = s.userRepository.GetUserByUsername(ctx, s.db, req.Username)
+	case req.Email != "":
+		user, err = s.userRepository.GetUserByEmail(ctx, s.db, req.Email)
+	default:
+		return dto.TokenResponse{}, utils.ErrBadRequest("isi nama pengguna atau email")
+	}
 	if err != nil {
 		// Pesan sama dengan password salah supaya keberadaan email tidak terungkap.
 		return dto.TokenResponse{}, errKredensial
@@ -55,6 +65,10 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (dto.Toke
 	}
 	if !user.IsAktif {
 		return dto.TokenResponse{}, utils.ErrForbidden("akun dinonaktifkan, hubungi Sudin")
+	}
+	// Riwayat masuk (layar U1) memakai log aktivitas.
+	if err := aktivitas.Catat(s.db.WithContext(ctx), user.ID, "auth.masuk", "user", user.ID, perangkat); err != nil {
+		return dto.TokenResponse{}, err
 	}
 	return s.issue(ctx, user)
 }

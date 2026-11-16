@@ -18,6 +18,9 @@ type PendidikRequest struct {
 	Sertifikasi       string  `json:"sertifikasi" binding:"omitempty,max=150"`
 	Email             string  `json:"email" binding:"omitempty,email,max=255"`
 	Telepon           string  `json:"telepon" binding:"omitempty,max=20"`
-	AlamatDomisili    string  `json:"alamat_domisili"`
+	AlamatDomisili    string  `json:"alamat_domisili" binding:"omitempty,max=500"`
 	KotaDomisili      string  `json:"kota_domisili" binding:"omitempty,max=100"`
+	TanggalLahir      string  `json:"tanggal_lahir" binding:"omitempty,datetime=2006-01-02"`
+	TMTCPNS           string  `json:"tmt_cpns" binding:"omitempty,datetime=2006-01-02"`
+	TMTGolongan       string  `json:"tmt_golongan" binding:"omitempty,datetime=2006-01-02"`
 }

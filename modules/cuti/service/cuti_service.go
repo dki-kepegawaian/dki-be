@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Caknoooo/go-gin-clean-starter/pkg/arsipkan"
 	"strings"
 	"time"
 
@@ -336,6 +337,16 @@ func (s *cutiService) Putuskan(ctx context.Context, actor entities.User, id stri
 		c.DiputuskanOleh, c.DiputuskanAt = &actor.ID, &now
 		if err := s.catatTransisi(ctx, tx, actor, &c, req.Keputusan, "cuti.putuskan", c.CatatanKeputusan); err != nil {
 			return err
+		}
+		if req.Keputusan == entities.CutiStatusDisetujui {
+			if err := arsipkan.Otomatis(tx, arsipkan.Data{
+				PendidikID: c.PendidikID, SekolahID: c.SekolahID, Kategori: entities.ArsipKategoriSK,
+				JenisDokumen: "Surat Keputusan " + labelJenis[c.Jenis], Nomor: c.NomorSuratIzin, TanggalDokumen: c.TanggalSuratIzin,
+				Keterangan: fmt.Sprintf("%s · %s s.d. %s", c.Nomor, c.TanggalMulai.Format(tglFormat), c.TanggalSelesai.Format(tglFormat)),
+				DokumenID:  doc.ID, SumberModul: "cuti", SumberID: c.ID, Oleh: actor.ID,
+			}); err != nil {
+				return err
+			}
 		}
 
 		judul := "Cuti disetujui"

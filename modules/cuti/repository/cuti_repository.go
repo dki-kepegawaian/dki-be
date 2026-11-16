@@ -7,7 +7,7 @@ import (
 	"github.com/Caknoooo/go-gin-clean-starter/database/entities"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/cuti/dto"
 	"github.com/Caknoooo/go-gin-clean-starter/pkg/akses"
-	"github.com/Caknoooo/go-gin-clean-starter/pkg/constants"
+	"github.com/Caknoooo/go-gin-clean-starter/pkg/penerima"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -174,25 +174,13 @@ func (r *cutiRepository) AdaTumpangTindih(ctx context.Context, tx *gorm.DB, pend
 }
 
 func (r *cutiRepository) StafSudinSekolah(ctx context.Context, tx *gorm.DB, sekolahID uuid.UUID) ([]uuid.UUID, error) {
-	var ids []uuid.UUID
-	err := r.tx(tx).WithContext(ctx).Model(&entities.User{}).
-		Where("role = ? AND is_aktif = true AND sudin_id = (SELECT sudin_id FROM sekolah WHERE id = ?)", constants.ENUM_ROLE_STAF_SUDIN, sekolahID).
-		Pluck("id", &ids).Error
-	return ids, err
+	return penerima.StafSudinSekolah(ctx, r.tx(tx), sekolahID)
 }
 
 func (r *cutiRepository) StafSudinValid(ctx context.Context, tx *gorm.DB, userID uuid.UUID, sudinID uuid.UUID) (bool, error) {
-	var n int64
-	err := r.tx(tx).WithContext(ctx).Model(&entities.User{}).
-		Where("id = ? AND role = ? AND sudin_id = ? AND is_aktif = true", userID, constants.ENUM_ROLE_STAF_SUDIN, sudinID).
-		Count(&n).Error
-	return n > 0, err
+	return penerima.StafSudinValid(ctx, r.tx(tx), userID, sudinID)
 }
 
 func (r *cutiRepository) OperatorSekolah(ctx context.Context, tx *gorm.DB, sekolahID uuid.UUID) ([]uuid.UUID, error) {
-	var ids []uuid.UUID
-	err := r.tx(tx).WithContext(ctx).Model(&entities.User{}).
-		Where("role = ? AND sekolah_id = ? AND is_aktif = true", constants.ENUM_ROLE_OPERATOR_SEKOLAH, sekolahID).
-		Pluck("id", &ids).Error
-	return ids, err
+	return penerima.OperatorSekolah(ctx, r.tx(tx), sekolahID)
 }

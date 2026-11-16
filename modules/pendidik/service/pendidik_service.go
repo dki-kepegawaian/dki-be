@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/Caknoooo/go-gin-clean-starter/database/entities"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/pendidik/dto"
@@ -95,6 +96,9 @@ func (s *pendidikService) isi(ctx context.Context, actor entities.User, p *entit
 	p.Telepon = req.Telepon
 	p.AlamatDomisili = req.AlamatDomisili
 	p.KotaDomisili = req.KotaDomisili
+	p.TanggalLahir = tanggal(req.TanggalLahir)
+	p.TMTCPNS = tanggal(req.TMTCPNS)
+	p.TMTGolongan = tanggal(req.TMTGolongan)
 	return nil
 }
 
@@ -105,4 +109,16 @@ func (s *pendidikService) simpan(ctx context.Context, p *entities.Pendidik) erro
 		return utils.ErrConflict("NIP sudah terdaftar")
 	}
 	return err
+}
+
+// tanggal mengubah "2006-01-02" (sudah divalidasi binding) menjadi *time.Time; kosong = nil.
+func tanggal(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return nil
+	}
+	return &t
 }

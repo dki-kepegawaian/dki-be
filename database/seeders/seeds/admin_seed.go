@@ -13,6 +13,8 @@ import (
 
 // AdminSeeder membuat akun admin awal dari ADMIN_EMAIL dan ADMIN_PASSWORD bila belum ada.
 // Akun yang sudah ada tidak diubah, jadi password yang diganti lewat aplikasi tetap aman.
+var adminUsername = "admin"
+
 func AdminSeeder(db *gorm.DB) error {
 	email := strings.ToLower(strings.TrimSpace(os.Getenv("ADMIN_EMAIL")))
 	password := os.Getenv("ADMIN_PASSWORD")
@@ -24,7 +26,7 @@ func AdminSeeder(db *gorm.DB) error {
 		return errors.New("ADMIN_PASSWORD minimal 8 karakter")
 	}
 	admin := entities.User{
-		Name: "Administrator", Email: email, Password: password,
+		Name: "Administrator", Email: email, Password: password, Username: &adminUsername,
 		Role: constants.ENUM_ROLE_ADMIN, IsVerified: true, IsAktif: true,
 	}
 	return db.Where(entities.User{Email: email}).FirstOrCreate(&admin).Error

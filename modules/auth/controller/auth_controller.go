@@ -29,7 +29,11 @@ func (c *authController) Login(ctx *gin.Context) {
 		utils.RespondError(ctx, "gagal masuk", utils.ErrBadRequest(err.Error()))
 		return
 	}
-	res, err := c.authService.Login(ctx.Request.Context(), req)
+	ua := ctx.Request.UserAgent()
+	if r := []rune(ua); len(r) > 255 {
+		ua = string(r[:255])
+	}
+	res, err := c.authService.Login(ctx.Request.Context(), req, ua)
 	if err != nil {
 		utils.RespondError(ctx, "gagal masuk", err)
 		return

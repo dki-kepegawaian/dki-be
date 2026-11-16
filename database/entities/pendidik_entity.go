@@ -3,6 +3,7 @@ package entities
 import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"time"
 )
 
 const (
@@ -32,6 +33,11 @@ type Pendidik struct {
 	Telepon           string    `gorm:"type:varchar(20)" json:"telepon"`
 	AlamatDomisili    string    `gorm:"type:text" json:"alamat_domisili"`
 	KotaDomisili      string    `gorm:"type:varchar(100)" json:"kota_domisili"`
+	// Untuk TMT pensiun (batas usia) dan masa kerja; null bila belum diisi.
+	TanggalLahir *time.Time `gorm:"type:date" json:"tanggal_lahir"`
+	TMTCPNS      *time.Time `gorm:"column:tmt_cpns;type:date" json:"tmt_cpns"`
+	// TMT golongan sekarang, untuk syarat 4 tahun kenaikan pangkat; null bila belum diisi.
+	TMTGolongan *time.Time `gorm:"column:tmt_golongan;type:date" json:"tmt_golongan"`
 
 	Sekolah *Sekolah `gorm:"foreignKey:SekolahID;constraint:OnDelete:RESTRICT" json:"sekolah,omitempty"`
 

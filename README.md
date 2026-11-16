@@ -1,6 +1,11 @@
 # Teralur Backend (dki-be)
 
-Backend layanan kepegawaian guru untuk Suku Dinas (Sudin) Pendidikan DKI Jakarta. Saat ini mencakup akun dan peran, data sekolah dan pendidik, dokumen, notifikasi, dan pengajuan cuti.
+Backend layanan kepegawaian guru untuk Suku Dinas (Sudin) Pendidikan DKI Jakarta. Isinya:
+
+- **Fondasi:** akun dan peran, data sekolah dan pendidik, dokumen, notifikasi.
+- **Layanan guru:** cuti, pensiun, kenaikan pangkat, sikap disiplin, layanan Dapodik, penilaian kinerja P3K Paruh Waktu.
+- **Pekerjaan Sudin:** generator surat, analisis jabatan, arsip kepegawaian.
+- **Tampilan gabungan:** tugas, daftar pengajuan, dan rekap lintas modul.
 
 Dibangun dengan Go (Gin, GORM), PostgreSQL, Garage (penyimpanan berkas yang kompatibel dengan S3), dan nginx. Semuanya dijalankan lewat Docker.
 
@@ -40,20 +45,22 @@ Empat layanan (`app`, `postgres`, `garage`, `nginx`) harus berstatus `Up`. Lalu 
 
 Akun berikut dibuat otomatis. Semua akun contoh memakai password `teralur123`, kecuali admin.
 
-| Peran | Email | Password |
-|---|---|---|
-| admin | `admin@teralur.test` | `admin12345` |
-| staf Sudin (Jakarta Barat) | `staf.jb@teralur.test` | `teralur123` |
-| pimpinan (Jakarta Barat) | `pimpinan.jb@teralur.test` | `teralur123` |
-| operator SMP Negeri 45 | `operator.smpn45@teralur.test` | `teralur123` |
-| operator SD Negeri Rawa Buaya 09 | `operator.sdnrawabuaya09@teralur.test` | `teralur123` |
-| staf Sudin (Jakarta Selatan) | `staf.js@teralur.test` | `teralur123` |
+| Peran | Nama pengguna | Email | Password |
+|---|---|---|---|
+| admin | `admin` | `admin@teralur.test` | `admin12345` |
+| staf Sudin (Jakarta Barat) | `staf.jb` | `staf.jb@teralur.test` | `teralur123` |
+| pimpinan (Jakarta Barat) | `pimpinan.jb` | `pimpinan.jb@teralur.test` | `teralur123` |
+| operator SMP Negeri 45 | `operator.smpn45` | `operator.smpn45@teralur.test` | `teralur123` |
+| operator SD Negeri Rawa Buaya 09 | `operator.sdnrawabuaya09` | `operator.sdnrawabuaya09@teralur.test` | `teralur123` |
+| staf Sudin (Jakarta Selatan) | `staf.js` | `staf.js@teralur.test` | `teralur123` |
+
+Masuk bisa memakai nama pengguna atau email.
 
 Akun contoh hanya ada selama `SEED_DEMO=true` (bawaan). Tidak ada pendaftaran mandiri: akun dibuat oleh staf Sudin atau admin lewat `/api/akun`.
 
 **Mencoba API dari halaman `/docs`:**
 
-1. Buka `POST /api/auth/login`, klik **Test Request**, isi email dan password, lalu kirim.
+1. Buka `POST /api/auth/login`, klik **Test Request**, isi `username` (atau `email`) dan `password`, lalu kirim.
 2. Salin `access_token` dari respons.
 3. Di panel **Authentication** (Bearer Token), tempel token itu. Sekarang endpoint lain bisa dicoba.
 
@@ -107,6 +114,7 @@ cp .env.example .env              # PowerShell: Copy-Item .env.example .env
 | `JWT_SECRET` | Kunci penandatangan token. Wajib, minimal 16 karakter | nilai contoh |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Admin awal | `admin@teralur.test`, `admin12345` |
 | `SEED_DEMO` | `true` membuat sekolah, pendidik, dan akun contoh | `true` |
+| `PENGINGAT_TENGGAT` | `false` mematikan notifikasi "tenggat terlewat" yang dikirim tiap pagi pukul 08.00 WIB | `true` |
 | `APP_ENV` | `production` mematikan halaman `/docs` | `localhost` |
 | `DOCS_ENABLED` | `true` menyalakan `/docs` walau `APP_ENV=production` | `false` |
 | `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN` | Rahasia Garage | nilai contoh |
@@ -176,6 +184,7 @@ docs/         spesifikasi OpenAPI dan ERD
 ## Dokumentasi lain
 
 - Dokumentasi API: <http://localhost:81/docs> saat aplikasi berjalan, sumbernya [docs/openapi.yaml](docs/openapi.yaml)
-- Tabel database dan alur status cuti: [docs/ERD.md](docs/ERD.md)
+- Tabel database dan alur status tiap modul: [docs/ERD.md](docs/ERD.md)
+- Asumsi dan pertanyaan terbuka per modul (aturan yang belum pasti dari desain): [docs/catatan/](docs/catatan/)
 
 Proyek ini berawal dari [Go Gin Clean Starter](https://github.com/Caknoooo/go-gin-clean-starter) oleh Caknoooo (lisensi MIT, lihat [LICENSE](LICENSE)).

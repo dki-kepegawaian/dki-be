@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -9,12 +10,22 @@ import (
 	"github.com/Caknoooo/go-gin-clean-starter/docs"
 	"github.com/Caknoooo/go-gin-clean-starter/middlewares"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/akun"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/anjab"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/arsip"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/auth"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/cuti"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/dapodik"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/dasbor"
+	dasborService "github.com/Caknoooo/go-gin-clean-starter/modules/dasbor/service"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/disiplin"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/dokumen"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/kenaikanpangkat"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/kinerja"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/notifikasi"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/pendidik"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/pensiun"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/sekolah"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/surat"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/user"
 	"github.com/Caknoooo/go-gin-clean-starter/providers"
 	"github.com/Caknoooo/go-gin-clean-starter/script"
@@ -85,14 +96,28 @@ func main() {
 	user.RegisterRoutes(server, injector)
 	auth.RegisterRoutes(server, injector)
 	akun.RegisterRoutes(server, injector)
+	arsip.RegisterRoutes(server, injector)
+	dasbor.RegisterRoutes(server, injector)
 	sekolah.RegisterRoutes(server, injector)
 	pendidik.RegisterRoutes(server, injector)
 	dokumen.RegisterRoutes(server, injector)
 	notifikasi.RegisterRoutes(server, injector)
 	cuti.RegisterRoutes(server, injector)
+	dapodik.RegisterRoutes(server, injector)
+	kinerja.RegisterRoutes(server, injector)
+	anjab.RegisterRoutes(server, injector)
+	pensiun.RegisterRoutes(server, injector)
+	kenaikanpangkat.RegisterRoutes(server, injector)
+	disiplin.RegisterRoutes(server, injector)
+	surat.RegisterRoutes(server, injector)
 
 	// Dokumentasi API (Scalar) di /docs
 	docs.RegisterRoutes(server)
+
+	// Pengingat "tenggat terlewat" tiap pagi; PENGINGAT_TENGGAT=false mematikannya.
+	if os.Getenv("PENGINGAT_TENGGAT") != "false" {
+		go do.MustInvoke[dasborService.DasborService](injector).JalankanPengingat(context.Background())
+	}
 
 	run(server)
 }

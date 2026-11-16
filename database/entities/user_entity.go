@@ -8,9 +8,12 @@ import (
 )
 
 type User struct {
-	ID         uuid.UUID  `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	Name       string     `gorm:"type:varchar(100);not null" json:"name"`
-	Email      string     `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
+	ID    uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	Name  string    `gorm:"type:varchar(100);not null" json:"name"`
+	Email string    `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
+	// Username dipakai untuk masuk (layar L1); null untuk akun lama yang masuk dengan email.
+	Username   *string    `gorm:"type:varchar(50);uniqueIndex" json:"username"`
+	NIP        *string    `gorm:"column:nip;type:varchar(18)" json:"nip"`
 	TelpNumber string     `gorm:"type:varchar(20);index" json:"telp_number"`
 	Password   string     `gorm:"type:varchar(255);not null" json:"-"`
 	Role       string     `gorm:"type:varchar(50);not null;default:'user'" json:"role"`

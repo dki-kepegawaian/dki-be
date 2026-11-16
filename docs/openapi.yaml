@@ -4,7 +4,9 @@ info:
   version: 0.1.0
   description: |
     Backend layanan kepegawaian guru Sudin Pendidikan DKI (Teralur v0.9).
-    Cakupan saat ini: fondasi (akun, sekolah, pendidik, dokumen, notifikasi) dan modul Cuti.
+    Cakupan: fondasi (akun, sekolah, pendidik, dokumen, notifikasi), Cuti, Pensiun, Kenaikan Pangkat,
+    Sikap Disiplin, Layanan Dapodik, Kinerja P3K PW, Generator Surat, Analisis Jabatan, Arsip Kepegawaian,
+    dan Dasbor lintas modul. Asumsi dan pertanyaan terbuka per modul ada di `docs/catatan/`.
 
     **Peran**
     - `staf_sudin`: memeriksa dan memproses pengajuan di sekolah wilayah Sudin-nya.
@@ -13,7 +15,7 @@ info:
     - `admin`: akses semua data.
 
     **Autentikasi**: tidak ada pendaftaran mandiri; akun dibuat Sudin lewat `/api/akun`.
-    Login lewat `POST /api/auth/login`, lalu kirim `Authorization: Bearer <access_token>`.
+    Login lewat `POST /api/auth/login` (nama pengguna atau email), lalu kirim `Authorization: Bearer <access_token>`.
     Access token berlaku 15 menit; perbarui lewat `POST /api/auth/refresh`.
 
     **Akun bawaan Docker**: admin `admin@teralur.test` / `admin12345` (dari `ADMIN_EMAIL`/`ADMIN_PASSWORD`).
@@ -40,6 +42,105 @@ tags:
       tanda tangan basah pejabat (di luar sistem) → Sudin **catat keputusan**.
 
       Status: `diajukan`, `perlu_perbaikan`, `menunggu_surat_fisik`, `diproses_sudin`, `disetujui`, `ditolak`.
+  - name: Pensiun
+    description: |
+      Alur (Figma P1–P6): operator **pilih guru** (`GET /api/pensiun/perkiraan`) → **unggah 14 berkas** satu per satu
+      (`POST /api/pensiun/berkas`, PDF maks 2 MB) → **ajukan** dengan pernyataan sudah memeriksa berkas →
+      Sudin **verifikasi per berkas** (Valid / Tidak valid + alasan) → bila ada yang tidak valid, operator
+      **unggah ulang berkas yang ditolak saja** → Sudin **catat pengiriman ke BKD** (pengiriman di luar sistem) →
+      Sudin **unggah SK pensiun** dan pengajuan **Selesai**.
+      Status: `diajukan` → (`perlu_perbaikan` ↔ `diajukan`) → `terverifikasi` → `diusulkan_ke_bkd` → `selesai`.
+
+  - name: Kenaikan Pangkat
+    description: |
+      Alur (Figma K1–K6): operator **cari guru** (`GET /api/kenaikan-pangkat/perkiraan`, golongan berikutnya dihitung otomatis) →
+      **unggah 6 berkas** satu per satu (`POST /api/kenaikan-pangkat/berkas`, PDF maks 2 MB) → **ajukan** →
+      Sudin **verifikasi per berkas** → bila ada yang tidak valid, operator **unggah ulang berkas yang ditolak saja** →
+      Sudin **catat pengiriman ke BKD** untuk beberapa usulan sekaligus (satu surat pengantar) →
+      Sudin **unggah SK**: pangkat/golongan di data induk pendidik diperbarui dan pengajuan **Selesai**.
+      Status: `diajukan` → (`perlu_perbaikan` ↔ `diajukan`) → `terverifikasi` → `diusulkan_ke_bkd` → `selesai`.
+
+  - name: Sikap Disiplin
+    description: |
+      Alur (Figma DS1–DS9): operator **lapor** dugaan pelanggaran → Sudin **verifikasi** awal
+      (layak / perlu kelengkapan / tidak layak) → (jika kurang: operator **kelengkapan**, lalu verifikasi ulang) →
+      Sudin catat **pemeriksaan** (surat panggilan, BAP, tanggapan pegawai; pemanggilan dan BAP di luar sistem) →
+      Sudin ajukan **rekomendasi** hukuman → **pimpinan** menetapkan **keputusan** (setujui, ubah tingkat, atau kembalikan) →
+      Sudin **catat keputusan** final (nomor, tanggal, salinan, masa hukuman) → **tindak lanjut** (bukti penyampaian,
+      I'DIS BKN untuk PNS, upaya administratif) + operator kirim **laporan pelaksanaan** → Sudin **tutup** kasus.
+
+      Status: `registrasi`, `perlu_kelengkapan`, `pemeriksaan`, `menunggu_keputusan`, `sanksi_ditetapkan`,
+      `tindak_lanjut`, `selesai`, `tidak_dilanjutkan`.
+
+      Data sensitif: operator hanya melihat kasus sekolahnya dan tidak melihat pemeriksaan, BAP, rekomendasi,
+      catatan pimpinan, maupun berkas internal. Berkas kasus diunduh lewat `/api/disiplin/{id}/dokumen/{dokumen_id}`.
+
+  - name: Generator Surat
+    description: |
+      Alur (Figma S1–S5): staf Sudin **pilih jenis surat** → isi data surat untuk seorang pendidik
+      (data guru diisi dari master) dan **simpan draf** → **pratinjau** PDF → **buat dokumen**
+      (PDF disimpan, status `menunggu_ttd`) → cetak dan tanda tangan basah Kepala Sudin (di luar sistem) →
+      **unggah hasil pindai** (status `final`) → **tandai diserahkan** ke guru/sekolah.
+      Surat `draf` atau `menunggu_ttd` bisa **dibatalkan**. Surat `final` terkunci.
+
+      Peran: `staf_sudin` dan `admin` mengelola; `pimpinan` hanya membaca; `operator_sekolah` tidak punya akses
+      (hasil pindai final tetap bisa diunduh operator lewat `/api/dokumen/{id}` karena tersimpan di arsip sekolah).
+
+      Status: `draf`, `menunggu_ttd`, `final`, `dibatalkan`.
+
+  - name: Analisis Jabatan
+    description: |
+      Alur (Figma A1–A6) per periode tahun ajaran milik satu Sudin:
+      staf Sudin **membuat periode & parameter** (jam wajib, rasio siswa/rombel, batas TMT pensiun, beban JP) →
+      **impor spreadsheet master** (lembar Sekolah, Rombel, Guru; validasi per baris, simpan baris valid) →
+      **buka masa pembaruan** (parameter terkunci, semua sekolah jenjang periode jadi `draf`) →
+      operator sekolah **perbarui rombel & guru** lalu **kirim** → staf Sudin **tinjau**: tetapkan atau kembalikan
+      dengan catatan → **monitoring & rekomendasi pemerataan** dari hasil yang sudah ditetapkan.
+
+      Status per sekolah: `draf`, `dikirim`, `dikembalikan`, `ditetapkan` (final; hasil hitungan dibekukan).
+
+      Hitungan dua basis (versi SK dan versi kondisi riil):
+      kebutuhan mapel = ceil(Σ rombel_dihitung × JP mapel per tingkat / jam wajib);
+      kebutuhan guru kelas SD = Σ rombel_dihitung; rombel_dihitung = min(jumlah rombel, ceil(siswa / rasio)).
+      Tersedia = guru di daftar yang TMT pensiunnya (awal bulan setelah usia 60) jatuh setelah batas periode.
+
+  - name: Layanan Dapodik
+    description: |
+      Alur (Figma DP1–DP5): operator **pilih jenis layanan dan isi formulir** (tiket `baru`) →
+      staf Sudin (admin Dapodik) **tinjau**: minta info tambahan (`perlu_info_tambahan`) atau
+      proses di aplikasi Dapodik (di luar sistem) lalu **tandai selesai** dengan catatan →
+      bila diminta, operator **lengkapi** info dan tiket kembali `baru`.
+
+      Jenis: `revisi_akun_operator`, `autentikasi_ptk`, `kode_referral_yayasan`, `perbaikan_data_ptk`, `lainnya`.
+      Status: `baru`, `perlu_info_tambahan`, `selesai` (final). Nomor tiket `DPK-YYYY-NNNN`.
+
+  - name: Kinerja P3K PW
+    description: |
+      Alur (Figma KP1–KP5): operator pilih periode dan pegawai `PPPK_PW`, **isi nilai BerAKHLAK** (draf) →
+      **buat dokumen penilaian** PDF (`menunggu_ttd`) → operator cetak dan antar ke Sudin, Pejabat Penilai
+      tanda tangan basah (di luar sistem) → staf Sudin **unggah hasil pindai** dan tetapkan `final`.
+
+      Skala 1–5 untuk tujuh parameter; nilai akhir = rata-rata, 1 desimal; predikat Sangat kurang / Kurang /
+      Cukup / Baik (3,5–4,4) / Sangat baik. Status: `draf`, `menunggu_ttd`, `final`. Nomor `P3K-YYYY-NNNN`.
+
+  - name: Arsip Kepegawaian
+    description: |
+      Arsip dokumen kepegawaian per guru (Figma R1–R4, H4). Dokumen final dari modul Cuti, Pensiun,
+      Kenaikan Pangkat, Generator Surat, dan Kinerja P3K PW masuk otomatis (tampil "Sistem · modul X").
+      Operator, staf Sudin, dan admin bisa mengarsipkan dokumen manual (PDF/JPG, maks. 5 MB) dan menyimpan versi baru;
+      dokumen dari modul hanya bisa diganti versinya oleh Sudin. Setiap lihat, unduh, unggah, dan ganti versi tercatat
+      di log yang tidak dapat diubah (R4). Kasus disiplin tidak diarsipkan di sini.
+
+      Kategori: `sk`, `tunjangan`, `ijazah`, `kinerja`, `surat`, `lainnya`.
+
+  - name: Dasbor Lintas Modul
+    description: |
+      Tampilan gabungan dari semua modul, hanya membaca dan dibatasi scope peran:
+      Tugas Saya (T1, H1 "Perlu tindakan", B1), Daftar Pengajuan (D03, H1 "Pengajuan berjalan"),
+      dan ringkasan bulanan (D02, B1, B2) termasuk rekap PDF.
+      Tenggat tugas dihitung dalam hari kerja sejak perubahan status terakhir (Disiplin, Dapodik, dan Anjab memakai tenggat modulnya).
+      Untuk pimpinan, identitas guru pada kasus disiplin tidak ditampilkan di daftar.
+
 security:
   - bearerAuth: []
 
@@ -55,10 +156,12 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, password]
+              required: [password]
+              description: Isi `username` (layar L1) atau `email`.
               properties:
+                username: { type: string, maxLength: 50, example: staf.jb }
                 email: { type: string, format: email, example: staf.jb@teralur.test }
-                password: { type: string, example: teralur123 }
+                password: { type: string, maxLength: 72, example: teralur123 }
       responses:
         "200":
           description: Berhasil masuk
@@ -72,7 +175,7 @@ paths:
                       data: { $ref: "#/components/schemas/Token" }
         "400": { $ref: "#/components/responses/Error" }
         "401":
-          description: Email atau password salah
+          description: Nama pengguna/email atau password salah (pesan sama untuk keduanya)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -138,6 +241,7 @@ paths:
     put:
       tags: [Akun Saya]
       summary: Ganti password sendiri
+      description: Semua sesi (refresh token) akun ikut dicabut; masuk lagi dengan password baru.
       requestBody:
         required: true
         content:
@@ -148,6 +252,46 @@ paths:
               properties:
                 password_lama: { type: string }
                 password_baru: { type: string, minLength: 8, maxLength: 72 }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/user/me/riwayat-masuk:
+    get:
+      tags: [Akun Saya]
+      summary: Riwayat masuk (10 terakhir, U1)
+      responses:
+        "200":
+          description: Riwayat masuk, terbaru dulu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            waktu: { type: string, format: date-time }
+                            perangkat: { type: string, example: "Chrome · Windows" }
+
+  /api/user/me/keluar-sesi-lain:
+    post:
+      tags: [Akun Saya]
+      summary: Keluarkan semua sesi lain (U1)
+      description: Mencabut semua refresh token akun kecuali milik sesi ini.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string, description: Refresh token sesi ini }
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }
@@ -201,6 +345,8 @@ paths:
               type: object
               required: [name, email, role, password]
               properties:
+                username: { type: string, pattern: "^[a-z0-9._]{3,50}$", example: operator.smpn45, description: Untuk masuk; opsional, unik }
+                nip: { type: string, pattern: "^[0-9]{18}$" }
                 name: { type: string, example: Dedi Kurniawan }
                 email: { type: string, format: email, example: operator.smpn45@teralur.test }
                 telp_number: { type: string }
@@ -253,6 +399,8 @@ paths:
               type: object
               required: [name, email, role, is_aktif]
               properties:
+                username: { type: string, pattern: "^[a-z0-9._]{3,50}$" }
+                nip: { type: string, pattern: "^[0-9]{18}$" }
                 name: { type: string }
                 email: { type: string, format: email }
                 telp_number: { type: string }
@@ -351,6 +499,97 @@ paths:
                   - type: object
                     properties:
                       data: { $ref: "#/components/schemas/Sekolah" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Sekolah]
+      summary: Ubah kepala sekolah, kecamatan, dan alamat
+      description: Hanya `staf_sudin` (sekolah di wilayahnya) dan `admin`. NPSN, nama, dan jenjang tidak diubah di sini.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kepala_sekolah: { type: string, maxLength: 150, example: "Drs. Sutrisno Wibowo, M.Pd." }
+                kecamatan: { type: string, maxLength: 100 }
+                alamat: { type: string, maxLength: 500 }
+      responses:
+        "200":
+          description: Sekolah setelah diubah
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Sekolah" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/sekolah/{id}/profil:
+    get:
+      tags: [Sekolah]
+      summary: Profil sekolah untuk halaman profil akun (H5)
+      description: Data sekolah beserta kontak Sudin, jumlah guru per status kepegawaian, nama operator aktif, dan nama petugas Sudin aktif.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Profil sekolah
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: "#/components/schemas/Sekolah"
+                          - type: object
+                            properties:
+                              jumlah_guru: { type: integer, example: 8 }
+                              guru_per_status:
+                                type: object
+                                additionalProperties: { type: integer }
+                                example: { PNS: 5, PPPK: 3 }
+                              operator: { type: array, items: { type: string }, example: ["Dedi Kurniawan"] }
+                              petugas_sudin: { type: array, items: { type: string }, example: ["Bimo Rajendra"] }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/sudin/{id}/kontak:
+    put:
+      tags: [Sekolah]
+      summary: Ubah kontak layanan Sudin (tampil di profil sekolah)
+      description: Hanya `staf_sudin` untuk Sudin-nya sendiri (Sudin lain 404) dan `admin`.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kontak_unit: { type: string, maxLength: 150, example: Subbagian Umum dan Kepegawaian }
+                kontak_telepon: { type: string, maxLength: 30, example: "(021) 5550 0145" }
+                kontak_email: { type: string, format: email }
+                jam_layanan: { type: string, maxLength: 100, example: "Senin-Jumat, 08.00-16.00" }
+      responses:
+        "200":
+          description: Sudin setelah diubah
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Sudin" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
 
   /api/pendidik:
@@ -819,6 +1058,2726 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
 
+  # fragmen: pensiun
+  /api/pensiun:
+    get:
+      tags: [Pensiun]
+      summary: Daftar pengajuan pensiun (antrean Sudin Q2 / status sekolah P6)
+      description: |
+        Staf Sudin dan Pimpinan melihat sekolah di wilayahnya; Operator hanya sekolahnya.
+        Item daftar tidak memuat `berkas` dan `riwayat`, hanya `jumlah_berkas` dan `berkas_tidak_valid`.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: status
+          in: query
+          description: Satu atau beberapa status dipisah koma
+          schema: { type: string, example: "diajukan,perlu_perbaikan" }
+        - name: sekolah_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          description: Nomor registrasi, nama guru, atau awalan NIP
+          schema: { type: string }
+      responses:
+        "200":
+          description: Daftar pensiun, terbaru dulu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/PensiunPengajuan" }
+    post:
+      tags: [Pensiun]
+      summary: Ajukan pensiun guru (P2)
+      description: |
+        Hanya `operator_sekolah`, untuk pendidik PNS di sekolahnya; satu pengajuan per pendidik (status apa pun).
+        `berkas` memetakan **ke-14 kode** dari `GET /api/pensiun/persyaratan` ke id dokumen hasil
+        `POST /api/pensiun/berkas` (diunggah akun yang sama untuk sekolah yang sama dan belum dipakai pengajuan lain).
+        `batas_usia`: TMT = tanggal 1 bulan sesudah ulang tahun ke-60 (butuh `tanggal_lahir` pendidik).
+        `atas_permintaan_sendiri`: `tmt_pensiun` wajib, tanggal 1, di masa depan.
+        Staf Sudin di wilayah sekolah mendapat notifikasi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pendidik_id, jenis, pernyataan_diperiksa, berkas]
+              properties:
+                pendidik_id: { type: string, format: uuid }
+                jenis: { $ref: "#/components/schemas/PensiunJenis" }
+                tmt_pensiun:
+                  type: string
+                  format: date
+                  example: "2027-06-01"
+                  description: Wajib untuk atas_permintaan_sendiri, diabaikan untuk batas_usia
+                pernyataan_diperiksa:
+                  type: boolean
+                  description: Harus `true` ("Saya sudah memeriksa isi setiap berkas")
+                berkas:
+                  type: object
+                  description: Kode jenis berkas → id dokumen (14 entri)
+                  additionalProperties: { type: string, format: uuid }
+                  example: { sk_cpns: 5c2f6a8e-0000-0000-0000-000000000000, sk_pns: 6d3f6a8e-0000-0000-0000-000000000000 }
+      responses:
+        "201":
+          description: Pengajuan terkirim, status `diajukan`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/PensiunPengajuan" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/pensiun/persyaratan:
+    get:
+      tags: [Pensiun]
+      summary: Daftar 14 berkas persyaratan pensiun (P2)
+      responses:
+        "200":
+          description: Kode, label, dan kelompok berkas, urut seperti di layar
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/PensiunJenisBerkas" }
+
+  /api/pensiun/perkiraan:
+    get:
+      tags: [Pensiun]
+      summary: Data guru dan TMT pensiun batas usia sebelum mengajukan (P1)
+      description: Pendidik harus dalam scope akun. `kendala` kosong berarti pendidik bisa diajukan dengan jenis batas usia.
+      parameters:
+        - name: pendidik_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Perkiraan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/PensiunPerkiraan" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/pensiun/berkas:
+    post:
+      tags: [Pensiun]
+      summary: Unggah satu berkas persyaratan (P2)
+      description: |
+        Hanya `operator_sekolah`. PDF, maks 2 MB. Berkas belum terikat pengajuan sampai dirujuk di
+        `POST /api/pensiun` atau `POST /api/pensiun/{id}/perbaikan`. Diunggah satu per satu supaya
+        14 berkas tidak melebihi batas ukuran request (11 MiB).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [berkas]
+              properties:
+                berkas: { type: string, format: binary }
+      responses:
+        "201":
+          description: Berkas tersimpan; pakai `data.id` di pengajuan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Dokumen" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/pensiun/ringkasan:
+    get:
+      tags: [Pensiun]
+      summary: Jumlah pengajuan per status (kartu antrean Q2)
+      responses:
+        "200":
+          description: Jumlah per status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: { type: integer }
+                        example: { diajukan: 2, perlu_perbaikan: 1, terverifikasi: 1, diusulkan_ke_bkd: 1, selesai: 2 }
+
+  /api/pensiun/{id}:
+    get:
+      tags: [Pensiun]
+      summary: Detail pengajuan pensiun beserta berkas dan riwayat status
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/PensiunPengajuan" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/pensiun/{id}/perbaikan:
+    post:
+      tags: [Pensiun]
+      summary: Unggah ulang berkas yang tidak valid (operator, P6)
+      description: |
+        Hanya saat status `perlu_perbaikan`. `berkas` harus berisi persis semua berkas yang dinyatakan
+        tidak valid (berkas valid tidak boleh diganti). Berkas pengganti kembali "belum dinilai";
+        status kembali ke `diajukan` dan staf Sudin mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [berkas]
+              properties:
+                berkas:
+                  type: object
+                  additionalProperties: { type: string, format: uuid }
+                  example: { skp_terakhir: 5c2f6a8e-0000-0000-0000-000000000000 }
+      responses:
+        "200":
+          description: Perbaikan terkirim
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/PensiunPengajuan" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/pensiun/{id}/verifikasi:
+    post:
+      tags: [Pensiun]
+      summary: Verifikasi berkas per jenis (P3)
+      description: |
+        Hanya `staf_sudin`, saat status `diajukan`. Berkas yang tidak disebut mempertahankan penilaian
+        sebelumnya, tetapi setelah digabung semua berkas wajib sudah dinilai (putaran pertama: ke-14 berkas;
+        sesudah perbaikan: cukup berkas pengganti). Berkas tidak valid wajib punya `catatan`.
+        Semua valid → `terverifikasi`; ada yang tidak valid → `perlu_perbaikan`. Operator mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [penilaian]
+              properties:
+                penilaian:
+                  type: array
+                  minItems: 1
+                  maxItems: 14
+                  items: { $ref: "#/components/schemas/PensiunPenilaian" }
+      responses:
+        "200":
+          description: Penilaian tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/PensiunPengajuan" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/pensiun/{id}/kirim-bkd:
+    post:
+      tags: [Pensiun]
+      summary: Catat pengiriman usulan ke BKD (P4)
+      description: Hanya `staf_sudin`, saat status `terverifikasi`. Pengiriman dilakukan di luar sistem; status menjadi `diusulkan_ke_bkd`.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [nomor_surat_pengantar, tanggal_kirim]
+              properties:
+                nomor_surat_pengantar: { type: string, maxLength: 100, example: 800.1.6.1/2214/SDP.I/XI/2026 }
+                tanggal_kirim: { type: string, format: date, example: "2026-11-12", description: Tidak boleh di masa depan }
+                cara_kirim: { type: string, maxLength: 100, example: Diantar langsung ke BKD }
+                catatan: { type: string, maxLength: 1000, example: "Diterima petugas loket BKD, nomor agenda 4471." }
+                bukti: { type: string, format: binary, description: Opsional, tanda terima BKD (PDF/JPG/PNG) }
+      responses:
+        "200":
+          description: Pengiriman tercatat
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/PensiunPengajuan" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/pensiun/{id}/sk:
+    post:
+      tags: [Pensiun]
+      summary: Unggah SK pensiun dan selesaikan (P5)
+      description: |
+        Hanya `staf_sudin`, saat status `diusulkan_ke_bkd`. Status menjadi `selesai` (final, tidak bisa diubah),
+        SK diarsipkan, operator sekolah mendapat notifikasi dan dapat mengunduhnya. `tmt_pensiun` opsional,
+        mengganti TMT bila SK menyebut tanggal lain.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [nomor_sk, tanggal_sk, sk]
+              properties:
+                nomor_sk: { type: string, maxLength: 100, example: 882/3215/BKD/2026 }
+                tanggal_sk: { type: string, format: date, example: "2026-11-14", description: Tidak boleh di masa depan }
+                tmt_pensiun: { type: string, format: date, example: "2027-04-01" }
+                sk: { type: string, format: binary, description: Hasil pindai SK (PDF/JPG/PNG, maks 10 MB) }
+      responses:
+        "200":
+          description: SK tersimpan, pengajuan selesai
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/PensiunPengajuan" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  # fragmen: kenaikan_pangkat
+  /api/kenaikan-pangkat:
+    get:
+      tags: [Kenaikan Pangkat]
+      summary: Daftar usulan kenaikan pangkat (antrean Sudin Q3 / beranda sekolah K1, K6)
+      description: |
+        Staf Sudin dan Pimpinan melihat sekolah di wilayahnya; Operator hanya sekolahnya.
+        Item daftar tidak memuat `berkas` dan `riwayat`, hanya `jumlah_berkas` dan `berkas_tidak_valid`.
+        Antrean "Kirim usulan ke BKD" (K4) = `status=terverifikasi&periode=2027-04`.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: status
+          in: query
+          description: Satu atau beberapa status dipisah koma
+          schema: { type: string, example: "diajukan,perlu_perbaikan" }
+        - name: periode
+          in: query
+          description: Periode KP (YYYY-MM, April atau Oktober)
+          schema: { type: string, example: "2027-04" }
+        - name: sekolah_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          description: Nomor registrasi, nama guru, atau awalan NIP
+          schema: { type: string }
+      responses:
+        "200":
+          description: Daftar usulan, terbaru dulu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/KenaikanPangkatPengajuan" }
+    post:
+      tags: [Kenaikan Pangkat]
+      summary: Ajukan kenaikan pangkat guru (K2)
+      description: |
+        Hanya `operator_sekolah`, untuk pendidik PNS di sekolahnya yang golongannya dikenal dan belum IV/e,
+        dan tidak sedang punya usulan yang belum selesai. Golongan/pangkat baru = satu tingkat di atas golongan
+        di data induk; periode dihitung otomatis. `berkas` memetakan **ke-6 kode** dari
+        `GET /api/kenaikan-pangkat/persyaratan` ke id dokumen hasil `POST /api/kenaikan-pangkat/berkas`.
+        Staf Sudin di wilayah sekolah mendapat notifikasi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pendidik_id, berkas]
+              properties:
+                pendidik_id: { type: string, format: uuid }
+                berkas:
+                  type: object
+                  description: Kode jenis berkas → id dokumen (6 entri)
+                  additionalProperties: { type: string, format: uuid }
+                  example: { sk_pangkat_terakhir: 5c2f6a8e-0000-0000-0000-000000000000, pak: 6d3f6a8e-0000-0000-0000-000000000000 }
+      responses:
+        "201":
+          description: Usulan terkirim, status `diajukan`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/KenaikanPangkatPengajuan" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/kenaikan-pangkat/persyaratan:
+    get:
+      tags: [Kenaikan Pangkat]
+      summary: Daftar 6 berkas persyaratan kenaikan pangkat (K2)
+      responses:
+        "200":
+          description: Kode, label, dan kelompok berkas, urut seperti di layar
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/KenaikanPangkatJenisBerkas" }
+
+  /api/kenaikan-pangkat/perkiraan:
+    get:
+      tags: [Kenaikan Pangkat]
+      summary: Usulan golongan dan periode sebelum mengajukan (K2 "Cari data")
+      description: |
+        Pendidik harus dalam scope akun. `kendala` kosong berarti pendidik bisa diusulkan.
+        Syarat 4 tahun di golongan sekarang dicek terhadap tanggal periode bila `tmt_golongan` terisi di data induk;
+        bila kosong, syarat itu tidak dicek. `POST /api/kenaikan-pangkat` menolak (400) dengan alasan yang sama.
+      parameters:
+        - name: pendidik_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Perkiraan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/KenaikanPangkatPerkiraan" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/kenaikan-pangkat/memenuhi-syarat:
+    get:
+      tags: [Kenaikan Pangkat]
+      summary: Guru yang memenuhi syarat pada periode berikut (K1)
+      description: |
+        PNS dalam scope akun yang sudah 4 tahun atau lebih di golongannya pada tanggal periode berikut, belum di golongan
+        tertinggi, dan tidak punya usulan yang masih berjalan. Guru tanpa `tmt_golongan` tidak muncul. Maksimal 500 baris,
+        urut TMT terlama dulu.
+      responses:
+        "200":
+          description: Daftar guru
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            pendidik: { $ref: "#/components/schemas/KenaikanPangkatPendidik" }
+                            sekolah:
+                              type: object
+                              properties:
+                                id: { type: string, format: uuid }
+                                npsn: { type: string }
+                                nama: { type: string }
+                            periode: { type: string, example: "2027-04" }
+                            golongan_lama: { type: string, example: III/b }
+                            golongan_baru: { type: string, example: III/c }
+                            pangkat_baru: { type: string, example: Penata }
+                            tmt_golongan: { type: string, format: date, example: "2023-04-01" }
+                            masa_kerja_golongan: { $ref: "#/components/schemas/MasaKerjaGolongan" }
+
+  /api/kenaikan-pangkat/berkas:
+    post:
+      tags: [Kenaikan Pangkat]
+      summary: Unggah satu berkas persyaratan (K2)
+      description: |
+        Hanya `operator_sekolah`. PDF, maks 2 MB ("Format harus PDF"). Berkas belum terikat usulan sampai dirujuk di
+        `POST /api/kenaikan-pangkat` atau `POST /api/kenaikan-pangkat/{id}/perbaikan`.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [berkas]
+              properties:
+                berkas: { type: string, format: binary }
+      responses:
+        "201":
+          description: Berkas tersimpan; pakai `data.id` di pengajuan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Dokumen" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/kenaikan-pangkat/ringkasan:
+    get:
+      tags: [Kenaikan Pangkat]
+      summary: Jumlah usulan per status (kartu antrean Q3)
+      responses:
+        "200":
+          description: Jumlah per status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: { type: integer }
+                        example: { diajukan: 3, perlu_perbaikan: 1, terverifikasi: 3, diusulkan_ke_bkd: 1, selesai: 0 }
+
+  /api/kenaikan-pangkat/kirim-bkd:
+    post:
+      tags: [Kenaikan Pangkat]
+      summary: Catat pengiriman beberapa usulan ke BKD (K4)
+      description: |
+        Hanya `staf_sudin`. Semua `ids` harus dalam wilayahnya (404 bila tidak) dan berstatus `terverifikasi`
+        (409 bila tidak); jika satu gagal, tidak ada yang tersimpan. Status menjadi `diusulkan_ke_bkd`.
+        Bukti disimpan satu salinan per sekolah supaya operator tiap sekolah bisa mengunduhnya.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [ids, nomor_surat_pengantar, tanggal_kirim]
+              properties:
+                ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  description: Kirim field `ids` berulang, satu per usulan
+                  items: { type: string, format: uuid }
+                nomor_surat_pengantar: { type: string, maxLength: 100, example: 0045/KP.02.03/2027 }
+                tanggal_kirim: { type: string, format: date, example: "2027-02-20", description: Tidak boleh di masa depan }
+                cara_kirim: { type: string, maxLength: 100 }
+                catatan: { type: string, maxLength: 1000 }
+                bukti: { type: string, format: binary, description: Opsional, tanda terima BKD (PDF/JPG/PNG) }
+      responses:
+        "200":
+          description: Pengiriman tercatat
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          diusulkan:
+                            type: array
+                            items: { type: string, example: KP-2026-0118 }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/kenaikan-pangkat/{id}:
+    get:
+      tags: [Kenaikan Pangkat]
+      summary: Detail usulan beserta berkas dan riwayat status
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/KenaikanPangkatPengajuan" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/kenaikan-pangkat/{id}/perbaikan:
+    post:
+      tags: [Kenaikan Pangkat]
+      summary: Unggah ulang berkas yang tidak valid (operator, K6)
+      description: |
+        Hanya saat status `perlu_perbaikan`. `berkas` harus berisi persis semua berkas yang dinyatakan tidak valid.
+        Berkas pengganti kembali "belum dinilai"; status kembali ke `diajukan`.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [berkas]
+              properties:
+                berkas:
+                  type: object
+                  additionalProperties: { type: string, format: uuid }
+                  example: { skp_2_tahun: 5c2f6a8e-0000-0000-0000-000000000000, pak: 6d3f6a8e-0000-0000-0000-000000000000 }
+      responses:
+        "200":
+          description: Perbaikan terkirim
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/KenaikanPangkatPengajuan" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/kenaikan-pangkat/{id}/verifikasi:
+    post:
+      tags: [Kenaikan Pangkat]
+      summary: Verifikasi berkas per jenis (K3)
+      description: |
+        Hanya `staf_sudin`, saat status `diajukan`. Aturan sama dengan Pensiun: penilaian sebagian boleh,
+        tetapi setelah digabung semua berkas wajib sudah dinilai; tidak valid wajib punya `catatan`.
+        Semua valid → `terverifikasi`; ada yang tidak valid → `perlu_perbaikan`.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [penilaian]
+              properties:
+                penilaian:
+                  type: array
+                  minItems: 1
+                  maxItems: 6
+                  items: { $ref: "#/components/schemas/KenaikanPangkatPenilaian" }
+      responses:
+        "200":
+          description: Penilaian tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/KenaikanPangkatPengajuan" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/kenaikan-pangkat/{id}/sk:
+    post:
+      tags: [Kenaikan Pangkat]
+      summary: Unggah SK dan perbarui pangkat (K5)
+      description: |
+        Hanya `staf_sudin`, saat status `diusulkan_ke_bkd`. Dalam satu transaksi: SK diarsipkan, `pangkat` dan
+        `golongan` pendidik di data induk diganti dengan usulan baru, status menjadi `selesai` (final), dan operator
+        diberi tahu. 409 bila golongan di data induk sudah berubah dari golongan lama usulan (dan bukan golongan baru).
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [nomor_sk, tanggal_sk, tmt_pangkat, sk]
+              properties:
+                nomor_sk: { type: string, maxLength: 100, example: KP.1342/BKD/III/2027 }
+                tanggal_sk: { type: string, format: date, example: "2027-03-25", description: Tidak boleh di masa depan }
+                tmt_pangkat: { type: string, format: date, example: "2027-04-01" }
+                sk: { type: string, format: binary, description: Dokumen SK (PDF/JPG/PNG, maks 10 MB) }
+      responses:
+        "200":
+          description: SK tersimpan, pangkat diperbarui, usulan selesai
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/KenaikanPangkatPengajuan" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  # fragmen: disiplin
+  /api/disiplin:
+    get:
+      tags: [Sikap Disiplin]
+      summary: Daftar kasus (rekap DS9 / status sekolah / antrean pimpinan)
+      description: |
+        Staf Sudin dan pimpinan melihat sekolah di wilayahnya; operator hanya sekolahnya. Daftar hanya memuat ringkasan;
+        untuk `pimpinan` tanpa identitas guru (Figma B1). Tab DS9: Perlu tindakan = `status=registrasi,pemeriksaan,sanksi_ditetapkan`,
+        Berjalan = `status=perlu_kelengkapan,menunggu_keputusan,tindak_lanjut`, Selesai = `status=selesai,tidak_dilanjutkan`.
+        Antrean pimpinan ("Keputusan menunggu") = `status=menunggu_keputusan`.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: status
+          in: query
+          description: Satu atau beberapa status dipisah koma
+          schema: { type: string, example: "registrasi,pemeriksaan" }
+        - name: sekolah_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: tahun
+          in: query
+          description: Tahun laporan masuk
+          schema: { type: integer, example: 2026 }
+        - name: search
+          in: query
+          description: Nomor kasus, nama guru, atau awalan NIP
+          schema: { type: string }
+      responses:
+        "200":
+          description: Daftar kasus, terbaru dulu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/DisiplinKasus" }
+        "400": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Sikap Disiplin]
+      summary: Laporkan dugaan pelanggaran (DS1, operator)
+      description: |
+        Hanya `operator_sekolah`, untuk pendidik ASN (PNS/PPPK) di sekolahnya. Status awal `registrasi`,
+        tenggat verifikasi 5 hari kerja. Staf Sudin wilayah sekolah mendapat notifikasi (tanpa nama pegawai).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [pendidik_id, jenis_pelanggaran, uraian, kronologi, pernyataan, bukti_awal]
+              properties:
+                pendidik_id: { type: string, format: uuid }
+                jenis_pelanggaran: { $ref: "#/components/schemas/DisiplinJenisPelanggaran" }
+                uraian: { type: string, maxLength: 5000, description: Fakta yang tercatat, bukan kesimpulan }
+                kronologi:
+                  type: string
+                  description: JSON array 1-30 baris; tanggal tidak di masa depan; kejadian maks 500 karakter
+                  example: '[{"tanggal":"2026-03-13","kejadian":"Tidak hadir tanpa keterangan 3 hari kerja"}]'
+                pernyataan: { type: boolean, description: "Harus `true` (laporan disusun berdasarkan data yang benar)" }
+                bukti_awal: { type: string, format: binary, description: PDF/JPG/PNG maks 10 MB }
+                bukti_pendukung:
+                  type: array
+                  maxItems: 5
+                  items: { type: string, format: binary }
+      responses:
+        "201":
+          description: Laporan terkirim, status `registrasi`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinKasus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/disiplin/ringkasan:
+    get:
+      tags: [Sikap Disiplin]
+      summary: Kartu rekap kasus (DS9) dan jumlah per status (B2)
+      responses:
+        "200":
+          description: Ringkasan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinRingkasan" }
+
+  /api/disiplin/{id}:
+    get:
+      tags: [Sikap Disiplin]
+      summary: Detail kasus beserta riwayat status (isi disaring per peran)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinKasus" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/disiplin/{id}/dokumen/{dokumen_id}:
+    get:
+      tags: [Sikap Disiplin]
+      summary: Unduh berkas kasus
+      description: |
+        Berkas harus milik kasus dan kasus dalam scope pembaca. Operator sekolah tidak bisa mengunduh berkas internal
+        (`bap`, `tanggapan_pegawai`, `bukti_tambahan`, `bukti_penyampaian`) dan mendapat 404. Berkas internal juga tidak
+        tersedia lewat `/api/dokumen/{id}` (disimpan tanpa `sekolah_id`). `?inline=1` untuk pratinjau.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: dokumen_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: inline
+          in: query
+          schema: { type: string, enum: ["1"] }
+      responses:
+        "200":
+          description: Isi berkas
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/disiplin/{id}/verifikasi:
+    post:
+      tags: [Sikap Disiplin]
+      summary: Verifikasi awal kasus (DS2, staf Sudin)
+      description: |
+        Hanya saat `registrasi`. `layak` → `pemeriksaan` (semua butir daftar periksa harus `true`, tenggat 20 hari kerja);
+        `perlu_kelengkapan` → `perlu_kelengkapan` (`catatan` = daftar kekurangan, wajib; `batas_kelengkapan` default 10 hari kerja);
+        `tidak_layak` → `tidak_dilanjutkan` (final; `catatan` = alasan, wajib). Operator sekolah mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keputusan, identitas_sesuai, kronologi_jelas, bukti_memadai, dalam_kewenangan]
+              properties:
+                keputusan: { type: string, enum: [layak, perlu_kelengkapan, tidak_layak] }
+                identitas_sesuai: { type: boolean }
+                kronologi_jelas: { type: boolean }
+                bukti_memadai: { type: boolean }
+                dalam_kewenangan: { type: boolean }
+                catatan: { type: string, maxLength: 2000, example: "1. Rekap presensi bertanda tangan Kepala Sekolah. 2. Notula pembinaan lisan 10 Juni 2026." }
+                batas_kelengkapan: { type: string, format: date, example: "2026-10-22" }
+      responses:
+        "200":
+          description: Verifikasi tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinKasus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/disiplin/{id}/kelengkapan:
+    post:
+      tags: [Sikap Disiplin]
+      summary: Lengkapi laporan (DS3, operator)
+      description: |
+        Hanya saat `perlu_kelengkapan`. Status kembali ke `registrasi` untuk verifikasi ulang; staf Sudin mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [tanggapan, berkas]
+              properties:
+                tanggapan: { type: string, maxLength: 2000 }
+                berkas:
+                  type: array
+                  minItems: 1
+                  maxItems: 5
+                  items: { type: string, format: binary }
+      responses:
+        "200":
+          description: Kelengkapan terkirim
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinKasus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/disiplin/{id}/pemeriksaan:
+    post:
+      tags: [Sikap Disiplin]
+      summary: Catat pemanggilan dan hasil pemeriksaan (DS4, staf Sudin)
+      description: |
+        Hanya saat `pemeriksaan`; boleh disimpan berulang (status tidak berubah, berkas yang dikirim ditambahkan).
+        Pemanggilan dan BAP dilakukan di luar sistem. `waktu_pemeriksaan` dalam WIB.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [nomor_surat_panggilan, waktu_pemeriksaan]
+              properties:
+                nomor_surat_panggilan: { type: string, maxLength: 100, example: e-0412/KP.03.02 }
+                waktu_pemeriksaan: { type: string, example: "2026-10-29T09:00", description: "Format YYYY-MM-DDTHH:MM (WIB)" }
+                ringkasan_pemeriksaan: { type: string, maxLength: 5000 }
+                bap: { type: string, format: binary, description: BAP bertanda tangan }
+                tanggapan_pegawai: { type: string, format: binary, description: Tanggapan tertulis pegawai }
+                bukti_tambahan: { type: string, format: binary }
+      responses:
+        "200":
+          description: Hasil pemeriksaan tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinKasus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/disiplin/{id}/rekomendasi:
+    post:
+      tags: [Sikap Disiplin]
+      summary: Ajukan rekomendasi hukuman ke pimpinan (DS5, staf Sudin)
+      description: |
+        Hanya saat `pemeriksaan`, setelah ringkasan pemeriksaan, BAP, dan tanggapan tertulis pegawai ada (400 bila belum).
+        `jenis_hukuman` harus sesuai `tingkat`. Status → `menunggu_keputusan`, tenggat 5 hari kerja; pimpinan mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ringkasan_fakta, dugaan_terbukti, dasar_hukum, tingkat, jenis_hukuman, justifikasi]
+              properties:
+                ringkasan_fakta: { type: string, maxLength: 5000 }
+                dugaan_terbukti: { type: string, maxLength: 500, example: Tidak hadir tanpa keterangan 10 hari kerja (2026) }
+                dasar_hukum: { type: string, maxLength: 500, example: PP 94/2021 tentang Disiplin PNS - ketentuan kehadiran }
+                tingkat: { $ref: "#/components/schemas/DisiplinTingkat" }
+                jenis_hukuman: { $ref: "#/components/schemas/DisiplinJenisHukuman" }
+                justifikasi: { type: string, maxLength: 5000 }
+      responses:
+        "200":
+          description: Rekomendasi diajukan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinKasus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/disiplin/{id}/keputusan:
+    post:
+      tags: [Sikap Disiplin]
+      summary: Tetapkan keputusan hukuman (DS6, hanya pimpinan)
+      description: |
+        Hanya `pimpinan` Sudin wilayah sekolah, saat `menunggu_keputusan`. `setujui` → `sanksi_ditetapkan` dengan hukuman
+        rekomendasi; `ubah` → `sanksi_ditetapkan` dengan `tingkat` + `jenis_hukuman` baru (`catatan` wajib);
+        `kembalikan` → `pemeriksaan` untuk telaah (`catatan` wajib). Keputusan tidak dapat dibatalkan.
+        Staf Sudin dan sekolah diberi tahu.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keputusan]
+              properties:
+                keputusan: { type: string, enum: [setujui, ubah, kembalikan] }
+                tingkat: { $ref: "#/components/schemas/DisiplinTingkat" }
+                jenis_hukuman: { $ref: "#/components/schemas/DisiplinJenisHukuman" }
+                catatan: { type: string, maxLength: 2000, example: Setuju. Agar keputusan disampaikan langsung kepada pegawai disertai pembinaan oleh Kepala Sekolah. }
+      responses:
+        "200":
+          description: Keputusan tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinKasus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/disiplin/{id}/catat-keputusan:
+    post:
+      tags: [Sikap Disiplin]
+      summary: Catat keputusan final (DS7, staf Sudin)
+      description: |
+        Hanya saat `sanksi_ditetapkan`. `masa_mulai` wajib untuk hukuman bermasa; `masa_selesai` dihitung otomatis
+        (mis. 6 bulan dari 1 Des 2026 sampai 31 Mei 2027). Status → `tindak_lanjut`; sekolah diminta laporan pelaksanaan dalam 7 hari kerja.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [nomor_keputusan, tanggal_keputusan, salinan_keputusan]
+              properties:
+                nomor_keputusan: { type: string, maxLength: 100, example: e-0587/KP.04.01 }
+                tanggal_keputusan: { type: string, format: date, example: "2026-11-10" }
+                masa_mulai: { type: string, format: date, example: "2026-12-01" }
+                salinan_keputusan: { type: string, format: binary }
+      responses:
+        "200":
+          description: Keputusan final tercatat
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinKasus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/disiplin/{id}/tindak-lanjut:
+    post:
+      tags: [Sikap Disiplin]
+      summary: Perbarui tindak lanjut (DS7, staf Sudin)
+      description: |
+        Hanya saat `tindak_lanjut`; status tidak berubah, field kosong tidak mengubah data.
+        `dicatat_idis=true` hanya untuk PNS (pencatatan di I'DIS BKN dilakukan di luar sistem).
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                tanggal_diterima_pegawai: { type: string, format: date }
+                bukti_penyampaian: { type: string, format: binary }
+                dicatat_idis: { type: boolean }
+                upaya_administratif: { type: string, enum: [tidak_ada, ada] }
+                catatan_upaya: { type: string, maxLength: 2000 }
+      responses:
+        "200":
+          description: Tindak lanjut tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinKasus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/disiplin/{id}/laporan-pelaksanaan:
+    post:
+      tags: [Sikap Disiplin]
+      summary: Kirim laporan pelaksanaan hukuman (DS8, operator)
+      description: |
+        Hanya saat `tindak_lanjut`; status tidak berubah. Staf Sudin mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [catatan, berkas]
+              properties:
+                catatan: { type: string, maxLength: 2000 }
+                berkas: { type: string, format: binary }
+      responses:
+        "200":
+          description: Laporan pelaksanaan terkirim
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinKasus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/disiplin/{id}/tutup:
+    post:
+      tags: [Sikap Disiplin]
+      summary: Tutup kasus (DS7, staf Sudin)
+      description: |
+        Hanya saat `tindak_lanjut`. Syarat (409 bila belum): bukti penyampaian, laporan pelaksanaan sekolah, upaya administratif
+        diisi (bila `ada`, catatan wajib), dan untuk PNS sudah dicatat di I'DIS. Status → `selesai` (final).
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                catatan: { type: string, maxLength: 2000 }
+      responses:
+        "200":
+          description: Kasus ditutup
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DisiplinKasus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  # fragmen: surat
+  /api/surat/jenis:
+    get:
+      tags: [Generator Surat]
+      summary: Daftar jenis surat (S1)
+      description: Template surat didefinisikan di kode. Bisa dibaca `staf_sudin`, `admin`, `pimpinan`.
+      responses:
+        "200":
+          description: Jenis surat sesuai urutan kartu S1
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/SuratJenisItem" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/surat:
+    get:
+      tags: [Generator Surat]
+      summary: Daftar surat (Surat terakhir di S1, antrean Menunggu TTD di S4)
+      description: |
+        Staf Sudin dan Pimpinan melihat surat untuk pendidik di sekolah wilayahnya; Admin semua.
+        S4 "Surat lain yang menunggu tanda tangan" = `status=menunggu_ttd`.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: status
+          in: query
+          description: Satu atau beberapa status dipisah koma
+          schema: { type: string, example: "draf,menunggu_ttd" }
+        - name: jenis
+          in: query
+          schema: { $ref: "#/components/schemas/JenisSurat" }
+        - name: pendidik_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          description: Nomor surat, perihal, nama guru, atau awalan NIP
+          schema: { type: string }
+      responses:
+        "200":
+          description: Daftar surat, terbaru dulu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Surat" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Generator Surat]
+      summary: Simpan draf surat (S2)
+      description: |
+        `staf_sudin` (pendidik di wilayah Sudin-nya) atau `admin`. Data guru diambil dari master pendidik.
+        Nomor kosong = nomor urut otomatis; nomor isian dicek unik.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SuratBuatRequest" }
+      responses:
+        "201":
+          description: Draf tersimpan, status `draf`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Surat" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/surat/{id}:
+    get:
+      tags: [Generator Surat]
+      summary: Detail surat beserta riwayat status
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Surat" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Generator Surat]
+      summary: Ubah isian surat (S3 > Ubah isian)
+      description: Hanya saat status `draf`. Jenis dan pendidik tidak bisa diganti. Nomor kosong = nomor tetap.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SuratIsian" }
+      responses:
+        "200":
+          description: Isian tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Surat" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/surat/{id}/pratinjau:
+    get:
+      tags: [Generator Surat]
+      summary: Pratinjau PDF surat (S3)
+      description: |
+        Merender PDF dari isian dan data pendidik saat ini tanpa menyimpannya. Bisa untuk status apa pun;
+        PDF resmi yang dicetak adalah `dokumen` yang disimpan saat buat dokumen.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: "Berkas PDF (`Content-Disposition: inline`)"
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/surat/{id}/buat-dokumen:
+    post:
+      tags: [Generator Surat]
+      summary: Simpan & buat dokumen (S3)
+      description: |
+        Hanya dari `draf`. PDF dibuat lalu disimpan sebagai dokumen; status menjadi `menunggu_ttd`.
+        Staf Sudin di wilayah sekolah mendapat notifikasi untuk mengunggah pindaian setelah ditandatangani.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Status `menunggu_ttd`, `dokumen` berisi PDF untuk dicetak
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Surat" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/surat/{id}/final:
+    post:
+      tags: [Generator Surat]
+      summary: Unggah hasil pindai & tetapkan Final (S4)
+      description: |
+        Hanya dari `menunggu_ttd`. Hasil pindai wajib PDF, maks 5 MB. Status menjadi `final` dan terkunci.
+        Operator sekolah pendidik mendapat notifikasi dan bisa mengunduh hasil pindai.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [berkas]
+              properties:
+                berkas:
+                  type: string
+                  format: binary
+                  description: Hasil pindai surat bertanda tangan (PDF, maks 5 MB)
+      responses:
+        "200":
+          description: Status `final`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Surat" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/surat/{id}/batal:
+    post:
+      tags: [Generator Surat]
+      summary: Batalkan surat yang belum final
+      description: Dari `draf` atau `menunggu_ttd`. Status menjadi `dibatalkan`; nomor surat tidak dipakai ulang.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [alasan]
+              properties:
+                alasan: { type: string, maxLength: 1000, example: Pejabat meminta revisi isi surat }
+      responses:
+        "200":
+          description: Status `dibatalkan`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Surat" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/surat/{id}/serahkan:
+    post:
+      tags: [Generator Surat]
+      summary: Tandai surat asli sudah diserahkan (S5)
+      description: Hanya untuk surat `final`, sekali saja. Status tetap `final`; `diserahkan_at` terisi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Penyerahan tercatat
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Surat" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  # fragmen: anjab
+  /api/anjab/periode:
+    get:
+      tags: [Analisis Jabatan]
+      summary: Daftar periode Anjab
+      description: Staf Sudin dan Pimpinan melihat periode Sudin-nya; Operator melihat periode Sudin sekolahnya; Admin semua.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Daftar periode, tahun ajaran terbaru dulu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/AnjabPeriode" }
+    post:
+      tags: [Analisis Jabatan]
+      summary: Buat periode & parameter perhitungan (A1)
+      description: |
+        Hanya `staf_sudin`; periode dimiliki Sudin akun yang login. Satu periode per tahun ajaran per Sudin.
+        Beban JP divalidasi: jenjang termasuk periode, tingkat sesuai jenjang, tanpa duplikat.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnjabPeriodeRequest" }
+      responses:
+        "201":
+          description: Periode tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabPeriode" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/periode/{id}:
+    get:
+      tags: [Analisis Jabatan]
+      summary: Detail periode beserta beban JP dan progres per status
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabPeriode" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Analisis Jabatan]
+      summary: Ubah periode & parameter (A1)
+      description: Semua kolom dikirim ulang; beban JP diganti seluruhnya. Ditolak 409 setelah masa pembaruan dibuka.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnjabPeriodeRequest" }
+      responses:
+        "200":
+          description: Parameter tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabPeriode" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/periode/{id}/templat:
+    get:
+      tags: [Analisis Jabatan]
+      summary: Unduh templat spreadsheet master (A2)
+      description: Lembar Sekolah, Rombel, Guru (header saja; kolom NPSN/NIP/NIK berformat teks) dan lembar Petunjuk.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Berkas .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/periode/{id}/impor:
+    post:
+      tags: [Analisis Jabatan]
+      summary: Impor spreadsheet master (A2)
+      description: |
+        Hanya sebelum masa pembaruan dibuka (409 sesudahnya). Tanpa `simpan` (atau `simpan=false`) hanya memvalidasi
+        dan mengembalikan daftar galat per baris. Dengan `simpan=true` baris valid disimpan:
+        sekolah terdaftar sebagai peserta (draf); rombel dan daftar guru sekolah yang ada di berkas menggantikan data
+        sebelumnya; guru di-upsert ke tabel pendidik berdasar NIP (tanpa NIP: nama di sekolah yang sama).
+        Kolom Guru: NPSN, NIP, NIK, Nama, Status Kepegawaian, Golongan, Tanggal Lahir, TMT CPNS, Mapel SK, Mapel Riil, JP Riil.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [berkas]
+              properties:
+                berkas: { type: string, format: binary, description: ".xlsx dari templat, maks 10 MB" }
+                simpan: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Hasil validasi (dan penyimpanan bila `simpan=true`)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabImporHasil" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/periode/{id}/buka:
+    post:
+      tags: [Analisis Jabatan]
+      summary: Buka masa pembaruan (A3)
+      description: |
+        Mengunci parameter, mendaftarkan semua sekolah Sudin dengan jenjang periode sebagai `draf`,
+        dan mengirim notifikasi ke operator sekolah. Butuh minimal satu beban JP. Sekali saja (409 bila sudah dibuka).
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Masa pembaruan dibuka
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabPeriode" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/periode/{id}/tenggat:
+    put:
+      tags: [Analisis Jabatan]
+      summary: Perpanjang tenggat pembaruan (A3)
+      description: Hanya setelah dibuka; tanggal baru harus setelah tenggat lama. Sekolah yang belum mengirim mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tanggal_tutup]
+              properties:
+                tanggal_tutup: { type: string, format: date, example: "2026-12-12" }
+      responses:
+        "200":
+          description: Tenggat diperpanjang
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabPeriode" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/periode/{id}/pengingat:
+    post:
+      tags: [Analisis Jabatan]
+      summary: Kirim pengingat ke sekolah yang belum mengirim (A3)
+      description: Notifikasi ke operator sekolah berstatus `draf` atau `dikembalikan`.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Pengingat terkirim
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          jumlah_sekolah: { type: integer, example: 24 }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/periode/{id}/monitoring:
+    get:
+      tags: [Analisis Jabatan]
+      summary: Monitoring & rekomendasi pemerataan (A6)
+      description: |
+        Staf Sudin, Pimpinan, Admin. Memakai hasil versi kondisi riil sekolah yang sudah `ditetapkan`.
+        Rekomendasi memasangkan sekolah kelebihan dengan sekolah kekurangan per mapel (kecamatan sama diutamakan).
+        Mutasi tetap diproses di luar sistem.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: mapel
+          in: query
+          description: Saring rekomendasi untuk satu mapel (tidak peka huruf besar/kecil)
+          schema: { type: string, example: IPA }
+      responses:
+        "200":
+          description: Ringkasan periode dan rekomendasi
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabMonitoring" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/periode/{id}/monitoring/excel:
+    get:
+      tags: [Analisis Jabatan]
+      summary: Unduh rekap monitoring (A6, Excel)
+      description: Lembar "Rekap Sekolah" dan "Rekomendasi".
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Berkas .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/periode/{id}/monitoring/pdf:
+    get:
+      tags: [Analisis Jabatan]
+      summary: Unduh laporan Anjab (A6, PDF)
+      description: Ringkasan periode, rekap per sekolah, dan rekomendasi pemerataan guru; angkanya sama dengan monitoring.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Berkas PDF
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/sekolah:
+    get:
+      tags: [Analisis Jabatan]
+      summary: Daftar data Anjab per sekolah (A3 pantau / A4 milik operator)
+      description: Operator hanya melihat sekolahnya; Staf Sudin dan Pimpinan sekolah di wilayahnya.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: periode_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          description: Satu atau beberapa status dipisah koma
+          schema: { type: string, example: "draf,dikembalikan" }
+        - name: kecamatan
+          in: query
+          schema: { type: string, example: Kebon Jeruk }
+        - name: search
+          in: query
+          description: Nama sekolah atau awalan NPSN
+          schema: { type: string }
+      responses:
+        "200":
+          description: Daftar, urut nama sekolah
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/AnjabSekolah" }
+
+  /api/anjab/sekolah/{id}:
+    get:
+      tags: [Analisis Jabatan]
+      summary: Detail data Anjab sekolah dengan hasil hitungan dua versi (A4/A5)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabSekolah" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/sekolah/{id}/rombel:
+    put:
+      tags: [Analisis Jabatan]
+      summary: Perbarui rombongan belajar (A4, operator)
+      description: |
+        Mengganti seluruh data rombel. Hanya saat masa pembaruan terbuka, belum lewat tenggat,
+        dan status `draf` atau `dikembalikan` (409 selain itu). Tingkat sesuai jenjang sekolah.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rombel]
+              properties:
+                rombel:
+                  type: array
+                  minItems: 1
+                  maxItems: 12
+                  items:
+                    type: object
+                    required: [tingkat]
+                    properties:
+                      tingkat: { type: integer, example: 7 }
+                      jumlah_rombel: { type: integer, minimum: 0, maximum: 200, example: 9 }
+                      jumlah_siswa: { type: integer, minimum: 0, maximum: 20000, example: 288 }
+      responses:
+        "200":
+          description: Rombel tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabSekolah" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/sekolah/{id}/guru:
+    post:
+      tags: [Analisis Jabatan]
+      summary: Tambah guru ke daftar (A4, operator)
+      description: Pendidik harus terdaftar di sekolah tersebut. Aturan waktu dan status sama dengan ubah rombel.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pendidik_id, mapel_sk]
+              properties:
+                pendidik_id: { type: string, format: uuid }
+                mapel_sk: { type: string, maxLength: 100, example: Bahasa Indonesia }
+                mapel_riil: { type: string, maxLength: 100, example: Prakarya }
+                jp_riil: { type: integer, minimum: 0, maximum: 60, example: 24 }
+      responses:
+        "201":
+          description: Guru ditambahkan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabSekolah" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/sekolah/{id}/guru/{guruId}:
+    put:
+      tags: [Analisis Jabatan]
+      summary: Ubah mapel riil dan JP riil guru (A4, operator)
+      description: Mapel SK tidak diubah operator; perubahan SK lewat Sudin (impor).
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: guruId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mapel_riil]
+              properties:
+                mapel_riil: { type: string, maxLength: 100, example: Prakarya }
+                jp_riil: { type: integer, minimum: 0, maximum: 60, example: 24 }
+      responses:
+        "200":
+          description: Data guru tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabSekolah" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Analisis Jabatan]
+      summary: Keluarkan guru dari daftar Anjab sekolah (A4, operator)
+      description: Data pendidik tidak dihapus, hanya baris Anjab periode ini.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: guruId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Guru dihapus dari daftar
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabSekolah" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/sekolah/{id}/kirim:
+    post:
+      tags: [Analisis Jabatan]
+      summary: Kirim pembaruan ke Sudin (A4, operator)
+      description: |
+        Dari `draf` atau `dikembalikan` → `dikirim`, `kiriman_ke` bertambah. Syarat: ada rombel, ada guru,
+        dan semua guru yang dihitung sudah punya mapel riil (400). Staf Sudin mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Pembaruan terkirim
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabSekolah" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/anjab/sekolah/{id}/tinjau:
+    post:
+      tags: [Analisis Jabatan]
+      summary: Tetapkan atau kembalikan hasil Anjab sekolah (A5, staf Sudin)
+      description: |
+        Hanya saat status `dikirim`. `ditetapkan` final: hasil hitungan dibekukan dan sekolah tidak dapat mengubahnya lagi.
+        `dikembalikan` wajib disertai `catatan`. Operator sekolah mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keputusan]
+              properties:
+                keputusan: { type: string, enum: [ditetapkan, dikembalikan] }
+                catatan:
+                  type: string
+                  maxLength: 2000
+                  example: Sesuaikan mapel riil Dewi Anggraini dan jumlah siswa kelas IX (Dapodik 281).
+      responses:
+        "200":
+          description: Hasil tinjauan tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/AnjabSekolah" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  # fragmen: dapodik
+  /api/dapodik:
+    get:
+      tags: [Layanan Dapodik]
+      summary: Daftar tiket Dapodik (antrean Sudin DP3 / tiket saya DP1)
+      description: |
+        Staf Sudin dan Pimpinan melihat sekolah di wilayahnya; Operator hanya sekolahnya.
+        Tab DP3: Baru = `status=baru`, Perlu Info Tambahan = `status=perlu_info_tambahan`, Selesai = `status=selesai`.
+        Antrean DP3 diurutkan menurut tenggat dengan `urut=tenggat`.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: status
+          in: query
+          description: Satu atau beberapa status dipisah koma
+          schema: { type: string, example: "baru,perlu_info_tambahan" }
+        - name: jenis
+          in: query
+          schema: { $ref: "#/components/schemas/DapodikJenis" }
+        - name: sekolah_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          description: Nomor tiket atau nama sekolah
+          schema: { type: string }
+        - name: urut
+          in: query
+          description: "`tenggat` = tenggat terdekat dulu; default terbaru dulu"
+          schema: { type: string, enum: [tenggat] }
+      responses:
+        "200":
+          description: Daftar tiket
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/DapodikTiket" }
+    post:
+      tags: [Layanan Dapodik]
+      summary: Kirim tiket layanan Dapodik (DP1 + DP2)
+      description: |
+        Hanya `operator_sekolah`; tiket selalu milik sekolah operator. Field `isian` berupa string JSON objek
+        berisi field formulir per jenis (kunci huruf kecil/angka/garis bawah, maks 20 field, nilai maks 1000 karakter).
+
+        Aturan per jenis:
+        - `revisi_akun_operator`: isian wajib `nama_operator_lama`, `nama_operator_baru`, `nik_operator_baru` (16 digit),
+          `email_operator_baru`; minimal 2 lampiran (SK penunjukan operator, surat permohonan).
+        - `perbaikan_data_ptk`: `pendidik_id` (PTK di sekolah operator) dan isian `data_diperbaiki` wajib.
+        - Jenis lain: hanya `uraian` wajib.
+
+        Tenggat = 3 hari kerja sejak tiket masuk. Staf Sudin di wilayah sekolah mendapat notifikasi.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [jenis, uraian]
+              properties:
+                jenis: { $ref: "#/components/schemas/DapodikJenis" }
+                pendidik_id: { type: string, format: uuid, description: PTK terkait (wajib untuk perbaikan_data_ptk) }
+                isian:
+                  type: string
+                  description: Objek JSON field formulir
+                  example: '{"nama_operator_lama":"Dedi Kurniawan","nama_operator_baru":"Rizky Pratama Nugraha, S.Kom.","nik_operator_baru":"3173050101900008","email_operator_baru":"rizky.pratama@example.com"}'
+                uraian: { type: string, maxLength: 2000, description: Alasan atau penjelasan permintaan }
+                lampiran:
+                  type: array
+                  maxItems: 5
+                  items: { type: string, format: binary }
+                  description: PDF/JPG/PNG, maks 10 MB per berkas
+      responses:
+        "201":
+          description: Tiket terkirim, status `baru`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DapodikTiket" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/dapodik/ringkasan:
+    get:
+      tags: [Layanan Dapodik]
+      summary: Jumlah tiket per status (tab DP3)
+      responses:
+        "200":
+          description: Jumlah per status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: { type: integer }
+                        example: { baru: 6, perlu_info_tambahan: 1, selesai: 9 }
+
+  /api/dapodik/{id}:
+    get:
+      tags: [Layanan Dapodik]
+      summary: Detail tiket beserta lampiran dan riwayat status (DP4/DP5)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DapodikTiket" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/dapodik/{id}/tinjau:
+    post:
+      tags: [Layanan Dapodik]
+      summary: Tinjau tiket (staf Sudin, DP4)
+      description: |
+        Hanya saat status `baru`. `keputusan=perlu_info_tambahan` → `catatan` dikirim ke sekolah sebagai permintaan info.
+        `keputusan=selesai` → `catatan` adalah catatan penyelesaian setelah diproses di aplikasi Dapodik (di luar sistem);
+        status final. Operator sekolah mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keputusan, catatan]
+              properties:
+                keputusan: { type: string, enum: [selesai, perlu_info_tambahan] }
+                catatan: { type: string, maxLength: 2000 }
+      responses:
+        "200":
+          description: Tinjauan tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DapodikTiket" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/dapodik/{id}/lengkapi:
+    post:
+      tags: [Layanan Dapodik]
+      summary: Lengkapi info tambahan (operator, DP5)
+      description: Hanya saat status `perlu_info_tambahan`. Status kembali `baru` dengan tenggat baru 3 hari kerja.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [balasan]
+              properties:
+                balasan: { type: string, maxLength: 2000, description: Balasan untuk admin }
+                lampiran:
+                  type: array
+                  maxItems: 5
+                  items: { type: string, format: binary }
+                  description: Dokumen pendukung (opsional)
+      responses:
+        "200":
+          description: Kelengkapan terkirim
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DapodikTiket" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  # fragmen: kinerja_p3k
+  /api/kinerja-p3k:
+    get:
+      tags: [Kinerja P3K PW]
+      summary: Daftar penilaian (antrean Menunggu TTD KP4 / arsip Final KP5)
+      description: |
+        Staf Sudin dan Pimpinan melihat sekolah di wilayahnya; Operator hanya sekolahnya.
+        KP4 = `status=menunggu_ttd`, KP5 = `status=final`.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: status
+          in: query
+          description: Satu atau beberapa status dipisah koma
+          schema: { type: string, example: menunggu_ttd }
+        - name: tahun
+          in: query
+          schema: { type: integer, example: 2026 }
+        - name: semester
+          in: query
+          schema: { type: integer, enum: [1, 2] }
+        - name: sekolah_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          description: Nomor penilaian atau nama pegawai
+          schema: { type: string }
+      responses:
+        "200":
+          description: Daftar penilaian, terbaru diperbarui dulu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/KinerjaPenilaian" }
+        "400": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Kinerja P3K PW]
+      summary: Simpan draf penilaian (KP1 > Nilai, KP2 > Simpan draf)
+      description: |
+        Hanya `operator_sekolah`, untuk pegawai `PPPK_PW` di sekolahnya. Satu penilaian per pegawai per periode (409 bila sudah ada).
+        Nilai boleh belum lengkap; nilai akhir sementara dihitung dari parameter yang terisi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pendidik_id, tahun, semester]
+              properties:
+                pendidik_id: { type: string, format: uuid }
+                tahun: { type: integer, minimum: 2020, maximum: 2100, example: 2026 }
+                semester: { type: integer, enum: [1, 2], example: 2 }
+                nilai: { $ref: "#/components/schemas/KinerjaNilai" }
+      responses:
+        "201":
+          description: Draf tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/KinerjaPenilaian" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/kinerja-p3k/pegawai:
+    get:
+      tags: [Kinerja P3K PW]
+      summary: Pegawai PPPK PW beserta penilaiannya pada satu periode (KP1)
+      parameters:
+        - name: tahun
+          in: query
+          required: true
+          schema: { type: integer, example: 2026 }
+        - name: semester
+          in: query
+          required: true
+          schema: { type: integer, enum: [1, 2] }
+        - name: sekolah_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          description: Nama pegawai
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Daftar pegawai urut nama; `penilaian` null bila belum dinilai
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/KinerjaPegawai" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/kinerja-p3k/ringkasan:
+    get:
+      tags: [Kinerja P3K PW]
+      summary: Jumlah penilaian per status (Ringkasan periode KP4)
+      parameters:
+        - name: tahun
+          in: query
+          schema: { type: integer }
+        - name: semester
+          in: query
+          schema: { type: integer, enum: [1, 2] }
+      responses:
+        "200":
+          description: Jumlah per status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: { type: integer }
+                        example: { draf: 61, menunggu_ttd: 4, final: 38 }
+
+  /api/kinerja-p3k/{id}:
+    get:
+      tags: [Kinerja P3K PW]
+      summary: Detail penilaian beserta dokumen dan riwayat status
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/KinerjaPenilaian" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Kinerja P3K PW]
+      summary: Ubah nilai draf (KP2 > Simpan draf)
+      description: Hanya saat status `draf`. Seluruh nilai diganti; parameter yang tidak dikirim menjadi kosong.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nilai: { $ref: "#/components/schemas/KinerjaNilai" }
+      responses:
+        "200":
+          description: Draf tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/KinerjaPenilaian" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/kinerja-p3k/{id}/dokumen:
+    post:
+      tags: [Kinerja P3K PW]
+      summary: Buat dokumen penilaian PDF (KP2 > Buat dokumen penilaian, KP3)
+      description: |
+        Hanya saat status `draf` dan ketujuh parameter terisi (400 bila belum). Sistem membuat PDF berisi identitas
+        pegawai, periode, tabel nilai per aspek, nilai akhir/predikat, dan ruang tanda tangan; status → `menunggu_ttd`.
+        PDF diunduh lewat `dokumen_sistem.url`. Staf Sudin di wilayah sekolah mendapat notifikasi.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Dokumen dibuat
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/KinerjaPenilaian" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /api/kinerja-p3k/{id}/final:
+    post:
+      tags: [Kinerja P3K PW]
+      summary: Unggah dokumen bertanda tangan dan tetapkan Final (staf Sudin, KP4)
+      description: |
+        Hanya saat status `menunggu_ttd`. Kedua konfirmasi wajib `true`. Status → `final` (tidak bisa diubah);
+        operator sekolah mendapat notifikasi dan bisa mengunduh `dokumen_ttd`.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [berkas, ttd_jelas, data_sesuai]
+              properties:
+                berkas: { type: string, format: binary, description: Hasil pindai bertanda tangan (PDF/JPG/PNG, maks 10 MB) }
+                ttd_jelas: { type: boolean, description: Tanda tangan dan stempel Pejabat Penilai terlihat jelas }
+                data_sesuai: { type: boolean, description: Nama pegawai, periode, dan nilai sama dengan dokumen sistem }
+      responses:
+        "200":
+          description: Ditetapkan Final
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/KinerjaPenilaian" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  # fragmen: arsip
+  /api/arsip:
+    get:
+      tags: [Arsip Kepegawaian]
+      summary: Daftar arsip (R1, H4)
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - { name: pendidik_id, in: query, schema: { type: string, format: uuid } }
+        - { name: kategori, in: query, schema: { $ref: "#/components/schemas/ArsipKategori" } }
+        - { name: search, in: query, description: "Jenis dokumen, nomor, nama guru, atau awalan NIP", schema: { type: string } }
+      responses:
+        "200":
+          description: Daftar arsip, terbaru dulu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/Arsip" } }
+    post:
+      tags: [Arsip Kepegawaian]
+      summary: Arsipkan dokumen (R3)
+      description: Operator (sekolahnya), staf Sudin, admin. PDF atau JPG, maks. 5 MB per file.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [pendidik_id, kategori, jenis_dokumen, berkas]
+              properties:
+                pendidik_id: { type: string, format: uuid }
+                kategori: { $ref: "#/components/schemas/ArsipKategori" }
+                jenis_dokumen: { type: string, maxLength: 150, example: Surat Keterangan Tunjangan Profesi }
+                nomor: { type: string, maxLength: 100 }
+                tanggal_dokumen: { type: string, format: date }
+                keterangan: { type: string, maxLength: 1000 }
+                berkas: { type: string, format: binary }
+                lampiran: { type: string, format: binary }
+      responses:
+        "201":
+          description: Dokumen diarsipkan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Arsip" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/arsip/ringkasan:
+    get:
+      tags: [Arsip Kepegawaian]
+      summary: Jumlah arsip per kategori seorang guru (R1)
+      parameters:
+        - { name: pendidik_id, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Ringkasan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          total: { type: integer }
+                          per_kategori: { type: object, additionalProperties: { type: integer } }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/arsip/log:
+    get:
+      tags: [Arsip Kepegawaian]
+      summary: Log aktivitas arsip (R4)
+      description: Staf Sudin, pimpinan, admin; dalam scope wilayah.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - { name: dari, in: query, schema: { type: string, format: date } }
+        - { name: sampai, in: query, schema: { type: string, format: date } }
+        - { name: user_id, in: query, schema: { type: string, format: uuid } }
+        - { name: aksi, in: query, schema: { type: string, enum: [melihat, mengunduh, mengunggah, mengganti_versi] } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Log, terbaru dulu
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/ArsipLog" } }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/arsip/log/ekspor:
+    get:
+      tags: [Arsip Kepegawaian]
+      summary: Ekspor log aktivitas (CSV)
+      description: Filter sama dengan daftar log; maks. 10.000 baris.
+      responses:
+        "200":
+          description: Berkas CSV
+          content:
+            text/csv:
+              schema: { type: string }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/arsip/{id}:
+    get:
+      tags: [Arsip Kepegawaian]
+      summary: Detail arsip beserta riwayat versi (R2)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Arsip" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/arsip/{id}/unduh:
+    get:
+      tags: [Arsip Kepegawaian]
+      summary: Lihat atau unduh satu versi
+      description: "`inline=1` dicatat sebagai melihat; selain itu mengunduh."
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - { name: versi, in: query, description: Default versi terkini, schema: { type: integer, minimum: 1 } }
+        - { name: inline, in: query, schema: { type: string, enum: ["1"] } }
+      responses:
+        "200":
+          description: Isi berkas
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/arsip/{id}/versi:
+    post:
+      tags: [Arsip Kepegawaian]
+      summary: Simpan versi baru (R2, R3)
+      description: Dokumen yang diarsipkan otomatis dari modul hanya bisa diganti versinya oleh staf Sudin/admin.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [berkas]
+              properties:
+                catatan: { type: string, maxLength: 500 }
+                berkas: { type: string, format: binary }
+                lampiran: { type: string, format: binary }
+      responses:
+        "201":
+          description: Versi baru tersimpan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Arsip" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  # fragmen: dasbor
+  /api/dasbor/tugas:
+    get:
+      tags: [Dasbor Lintas Modul]
+      summary: Tugas Saya sesuai peran, urut tenggat terdekat (T1)
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - { name: kategori, in: query, schema: { type: string, enum: [perlu_tindakan, menunggu_fisik, menunggu_ttd] } }
+        - { name: modul, in: query, schema: { $ref: "#/components/schemas/DasborModul" } }
+      responses:
+        "200":
+          description: Tugas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      per_kategori: { type: object, additionalProperties: { type: integer } }
+                      data: { type: array, items: { $ref: "#/components/schemas/DasborTugas" } }
+
+  /api/dasbor/pengajuan:
+    get:
+      tags: [Dasbor Lintas Modul]
+      summary: Daftar pengajuan lintas modul (D03)
+      description: Modul Cuti, Pensiun, Kenaikan Pangkat, Sikap Disiplin, Layanan Dapodik; terbaru diperbarui dulu.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - { name: modul, in: query, description: Dipisah koma, schema: { type: string, example: "cuti,pensiun" } }
+        - { name: kelompok, in: query, schema: { type: string, enum: [perlu_perbaikan, menunggu_surat_fisik, diproses, selesai] } }
+        - { name: search, in: query, description: "Nomor, nama guru, atau awalan NIP", schema: { type: string } }
+      responses:
+        "200":
+          description: Pengajuan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/DasborPengajuan" } }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/dasbor/ringkasan:
+    get:
+      tags: [Dasbor Lintas Modul]
+      summary: Ringkasan bulanan per modul (D02, B1, B2)
+      parameters:
+        - { name: bulan, in: query, description: Default bulan ini, schema: { type: string, example: "2026-10" } }
+      responses:
+        "200":
+          description: Ringkasan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/DasborRingkasan" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/dasbor/ringkasan/pdf:
+    get:
+      tags: [Dasbor Lintas Modul]
+      summary: Unduh rekap kepegawaian (PDF, B2)
+      parameters:
+        - { name: bulan, in: query, schema: { type: string, example: "2026-10" } }
+      responses:
+        "200":
+          description: Berkas PDF
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/dasbor/pengajuan/ekspor:
+    get:
+      tags: [Dasbor Lintas Modul]
+      summary: Unduh rekap pengajuan (CSV)
+      description: |
+        Tombol "Unduh rekap" di antrean Cuti, Pensiun, Kenaikan Pangkat, Sikap Disiplin, dan Layanan Dapodik: isi
+        `GET /api/dasbor/pengajuan` dengan saringan yang sama, maksimal 5.000 baris. Mengikuti scope akun; kolom pegawai
+        kosong untuk Sikap Disiplin bila pengunduh adalah pimpinan.
+      parameters:
+        - { name: modul, in: query, description: Dipisah koma, schema: { type: string, example: "cuti" } }
+        - { name: kelompok, in: query, schema: { type: string, enum: [perlu_perbaikan, menunggu_surat_fisik, diproses, selesai] } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: "Berkas CSV: modul, nomor, pegawai, sekolah, status, kelompok, diajukan, diperbarui"
+          content:
+            text/csv: { schema: { type: string } }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/dasbor/pengingat-tenggat:
+    post:
+      tags: [Dasbor Lintas Modul]
+      summary: Jalankan pengingat tenggat terlewat sekarang
+      description: |
+        Hanya `admin`. Aplikasi menjalankan ini sendiri setiap hari pukul 08.00 WIB (matikan dengan `PENGINGAT_TENGGAT=false`).
+        Setiap staf Sudin, pimpinan, dan operator aktif menerima notifikasi "Tenggat terlewat" untuk tugas di
+        `GET /api/dasbor/tugas` miliknya yang sudah lewat tenggat. Tugas yang sama diingatkan lagi paling cepat 7 hari kemudian.
+      responses:
+        "200":
+          description: Jumlah notifikasi yang dibuat
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Response"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          terkirim: { type: integer, example: 3 }
+        "403": { $ref: "#/components/responses/Error" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -897,6 +3856,8 @@ components:
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
+        username: { type: [string, "null"] }
+        nip: { type: [string, "null"] }
         email: { type: string }
         telp_number: { type: string }
         role: { $ref: "#/components/schemas/Role" }
@@ -912,6 +3873,10 @@ components:
         id: { type: string, format: uuid }
         kode: { type: string, example: JB }
         nama: { type: string, example: Jakarta Barat }
+        kontak_unit: { type: string, example: Subbagian Umum dan Kepegawaian }
+        kontak_telepon: { type: string, example: "(021) 5550 0145" }
+        kontak_email: { type: string }
+        jam_layanan: { type: string, example: "Senin-Jumat, 08.00-16.00" }
 
     Sekolah:
       type: object
@@ -923,6 +3888,7 @@ components:
         jenjang: { type: string, enum: [SD, SMP, SMA, SMK, SLB] }
         kecamatan: { type: string, example: Kebon Jeruk }
         alamat: { type: string }
+        kepala_sekolah: { type: string, example: "Drs. Sutrisno Wibowo, M.Pd." }
         sudin: { $ref: "#/components/schemas/Sudin" }
 
     StatusKepegawaian:
@@ -1046,3 +4012,1054 @@ components:
               created_at: { type: string, format: date-time }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    # fragmen: pensiun
+    PensiunStatus:
+      type: string
+      enum: [diajukan, perlu_perbaikan, terverifikasi, diusulkan_ke_bkd, selesai]
+
+    PensiunJenis:
+      type: string
+      enum: [batas_usia, atas_permintaan_sendiri]
+
+    PensiunJenisBerkas:
+      type: object
+      properties:
+        kode: { type: string, example: sk_cpns }
+        label: { type: string, example: SK CPNS }
+        kelompok: { type: string, example: Kepegawaian }
+
+    PensiunPenilaian:
+      type: object
+      required: [jenis, valid]
+      properties:
+        jenis: { type: string, maxLength: 40, example: skp_terakhir }
+        valid: { type: boolean }
+        catatan:
+          type: string
+          maxLength: 1000
+          description: Wajib bila `valid` false
+          example: Halaman tanda tangan pejabat penilai belum ada. Unggah SKP 2025 yang lengkap.
+
+    PensiunBerkas:
+      type: object
+      properties:
+        jenis: { type: string, example: skp_terakhir }
+        label: { type: string, example: SKP tahun terakhir }
+        kelompok: { type: string, example: Kepegawaian }
+        dokumen: { $ref: "#/components/schemas/Dokumen" }
+        valid: { type: [boolean, "null"], description: null = belum dinilai }
+        catatan: { type: string, description: Alasan tidak valid }
+        dinilai_at: { type: [string, "null"], format: date-time }
+
+    PensiunPendidik:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nama: { type: string, example: "Ahmad Fauzi, S.Pd." }
+        nip: { type: [string, "null"], example: "196703051990031007" }
+        status_kepegawaian: { $ref: "#/components/schemas/StatusKepegawaian" }
+        pangkat: { type: string, example: Pembina }
+        golongan: { type: string, example: IV/a }
+        jabatan: { type: string }
+        tanggal_lahir: { type: [string, "null"], format: date, example: "1967-03-05" }
+        tmt_cpns: { type: [string, "null"], format: date, example: "1990-03-01" }
+        tmt_golongan: { type: [string, "null"], format: date, example: "2023-04-01", description: TMT golongan sekarang; dipakai syarat 4 tahun kenaikan pangkat dan diperbarui otomatis saat SK KP dicatat }
+
+    PensiunMasaKerja:
+      type: [object, "null"]
+      description: Dari TMT CPNS sampai TMT pensiun; null bila TMT CPNS belum diisi
+      properties:
+        tahun: { type: integer, example: 37 }
+        bulan: { type: integer, example: 1 }
+
+    PensiunPerkiraan:
+      type: object
+      properties:
+        pendidik: { $ref: "#/components/schemas/PensiunPendidik" }
+        sekolah:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            npsn: { type: string }
+            nama: { type: string }
+        batas_usia: { type: integer, example: 60 }
+        tmt_pensiun_bup: { type: [string, "null"], format: date, example: "2027-04-01" }
+        masa_kerja: { $ref: "#/components/schemas/PensiunMasaKerja" }
+        pengajuan_nomor: { type: [string, "null"], example: PEN-2026-0031 }
+        jumlah_berkas_wajib: { type: integer, example: 14 }
+        kendala:
+          type: array
+          description: Alasan pendidik belum bisa diajukan; kosong = bisa
+          items: { type: string }
+          example: []
+
+    PensiunPengajuan:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nomor: { type: string, example: PEN-2026-0031 }
+        status: { $ref: "#/components/schemas/PensiunStatus" }
+        jenis: { $ref: "#/components/schemas/PensiunJenis" }
+        tmt_pensiun: { type: string, format: date, example: "2027-04-01" }
+        masa_kerja: { $ref: "#/components/schemas/PensiunMasaKerja" }
+        pendidik: { $ref: "#/components/schemas/PensiunPendidik" }
+        sekolah:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            npsn: { type: string }
+            nama: { type: string }
+        jumlah_berkas: { type: integer, example: 14 }
+        berkas_tidak_valid: { type: integer, example: 1 }
+        berkas:
+          type: array
+          description: Hanya di detail dan respons aksi, urut seperti daftar persyaratan
+          items: { $ref: "#/components/schemas/PensiunBerkas" }
+        diverifikasi_at: { type: [string, "null"], format: date-time }
+        nomor_surat_pengantar: { type: string, example: 800.1.6.1/2214/SDP.I/XI/2026 }
+        tanggal_kirim: { type: [string, "null"], format: date }
+        cara_kirim: { type: string }
+        bukti_kirim: { $ref: "#/components/schemas/Dokumen" }
+        catatan_kirim: { type: string }
+        nomor_sk: { type: string, example: 882/3215/BKD/2026 }
+        tanggal_sk: { type: [string, "null"], format: date }
+        sk: { $ref: "#/components/schemas/Dokumen" }
+        selesai_at: { type: [string, "null"], format: date-time }
+        riwayat:
+          type: array
+          description: Hanya di detail, urut dari yang terlama
+          items:
+            type: object
+            properties:
+              dari_status: { type: string }
+              ke_status: { $ref: "#/components/schemas/PensiunStatus" }
+              oleh: { type: string, format: uuid }
+              oleh_nama: { type: string }
+              catatan: { type: string }
+              created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    # fragmen: kenaikan_pangkat
+    KenaikanPangkatStatus:
+      type: string
+      enum: [diajukan, perlu_perbaikan, terverifikasi, diusulkan_ke_bkd, selesai]
+
+    KenaikanPangkatJenisBerkas:
+      type: object
+      properties:
+        kode: { type: string, example: pak }
+        label: { type: string, example: PAK (Penetapan Angka Kredit) }
+        kelompok: { type: string, example: Persyaratan }
+
+    KenaikanPangkatPenilaian:
+      type: object
+      required: [jenis, valid]
+      properties:
+        jenis: { type: string, maxLength: 40, example: skp_2_tahun }
+        valid: { type: boolean }
+        catatan:
+          type: string
+          maxLength: 1000
+          description: Wajib bila `valid` false
+          example: SKP tahun 2025 belum ditandatangani pejabat penilai.
+
+    KenaikanPangkatBerkas:
+      type: object
+      properties:
+        jenis: { type: string, example: pak }
+        label: { type: string, example: PAK (Penetapan Angka Kredit) }
+        kelompok: { type: string }
+        dokumen: { $ref: "#/components/schemas/Dokumen" }
+        valid: { type: [boolean, "null"], description: null = belum dinilai }
+        catatan: { type: string, description: Alasan tidak valid }
+        dinilai_at: { type: [string, "null"], format: date-time }
+
+    KenaikanPangkatPendidik:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nama: { type: string, example: "Dewi Anggraini, S.Pd.Gr." }
+        nip: { type: [string, "null"], example: "199009212015032004" }
+        status_kepegawaian: { $ref: "#/components/schemas/StatusKepegawaian" }
+        pangkat: { type: string, example: Penata Muda Tk. I }
+        golongan: { type: string, example: III/b }
+        jabatan: { type: string, example: Guru Ahli Pertama }
+
+    KenaikanPangkatPerkiraan:
+      type: object
+      properties:
+        pendidik: { $ref: "#/components/schemas/KenaikanPangkatPendidik" }
+        sekolah:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            npsn: { type: string }
+            nama: { type: string }
+        periode: { type: string, example: "2027-04" }
+        pangkat_lama: { type: string, example: Penata Muda Tk. I }
+        golongan_lama: { type: string, example: III/b }
+        pangkat_baru: { type: string, example: Penata }
+        golongan_baru: { type: string, example: III/c }
+        pengajuan_nomor: { type: [string, "null"], description: Usulan yang belum selesai, bila ada }
+        jumlah_berkas_wajib: { type: integer, example: 6 }
+        kendala:
+          type: array
+          description: Alasan pendidik belum bisa diusulkan; kosong = bisa
+          items: { type: string }
+          example: []
+        tmt_golongan: { type: [string, "null"], format: date, description: Null bila belum diisi di data induk }
+        masa_kerja_golongan:
+          oneOf:
+            - $ref: "#/components/schemas/MasaKerjaGolongan"
+            - type: "null"
+
+    MasaKerjaGolongan:
+      type: object
+      description: Masa kerja di golongan sekarang, dihitung sampai tanggal periode KP.
+      properties:
+        tahun: { type: integer, example: 4 }
+        bulan: { type: integer, example: 0 }
+
+    KenaikanPangkatPengajuan:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nomor: { type: string, example: KP-2026-0118 }
+        status: { $ref: "#/components/schemas/KenaikanPangkatStatus" }
+        periode: { type: string, example: "2027-04" }
+        pangkat_lama: { type: string, example: Penata Muda Tk. I }
+        golongan_lama: { type: string, example: III/b }
+        pangkat_baru: { type: string, example: Penata }
+        golongan_baru: { type: string, example: III/c }
+        pendidik: { $ref: "#/components/schemas/KenaikanPangkatPendidik" }
+        sekolah:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            npsn: { type: string }
+            nama: { type: string }
+        jumlah_berkas: { type: integer, example: 6 }
+        berkas_tidak_valid: { type: integer, example: 0 }
+        berkas:
+          type: array
+          description: Hanya di detail dan respons aksi, urut seperti daftar persyaratan
+          items: { $ref: "#/components/schemas/KenaikanPangkatBerkas" }
+        diverifikasi_at: { type: [string, "null"], format: date-time }
+        nomor_surat_pengantar: { type: string, example: 0045/KP.02.03/2027 }
+        tanggal_kirim: { type: [string, "null"], format: date }
+        cara_kirim: { type: string }
+        bukti_kirim: { $ref: "#/components/schemas/Dokumen" }
+        catatan_kirim: { type: string }
+        nomor_sk: { type: string, example: KP.1342/BKD/III/2027 }
+        tanggal_sk: { type: [string, "null"], format: date }
+        tmt_pangkat: { type: [string, "null"], format: date, example: "2027-04-01" }
+        sk: { $ref: "#/components/schemas/Dokumen" }
+        selesai_at: { type: [string, "null"], format: date-time }
+        riwayat:
+          type: array
+          description: Hanya di detail, urut dari yang terlama
+          items:
+            type: object
+            properties:
+              dari_status: { type: string }
+              ke_status: { $ref: "#/components/schemas/KenaikanPangkatStatus" }
+              oleh: { type: string, format: uuid }
+              oleh_nama: { type: string }
+              catatan: { type: string }
+              created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    # fragmen: disiplin
+    DisiplinStatus:
+      type: string
+      enum: [registrasi, perlu_kelengkapan, pemeriksaan, menunggu_keputusan, sanksi_ditetapkan, tindak_lanjut, selesai, tidak_dilanjutkan]
+
+    DisiplinJenisPelanggaran:
+      type: string
+      description: Ringkasan kewajiban/larangan PP 94/2021 (asumsi, lihat NOTES).
+      enum: [ketidakhadiran, jam_kerja, target_kinerja, penyalahgunaan_wewenang, gratifikasi, netralitas, barang_milik_negara, lainnya]
+
+    DisiplinTingkat:
+      type: string
+      enum: [ringan, sedang, berat]
+
+    DisiplinJenisHukuman:
+      type: string
+      description: |
+        PP 94/2021 Pasal 8. Ringan: `teguran_lisan`, `teguran_tertulis`, `pernyataan_tidak_puas`.
+        Sedang: `potong_tukin_6_bulan`, `potong_tukin_9_bulan`, `potong_tukin_12_bulan` (25%).
+        Berat: `penurunan_jabatan`, `pembebasan_jabatan` (12 bulan), `pemberhentian`.
+      enum: [teguran_lisan, teguran_tertulis, pernyataan_tidak_puas, potong_tukin_6_bulan, potong_tukin_9_bulan, potong_tukin_12_bulan, penurunan_jabatan, pembebasan_jabatan, pemberhentian]
+
+    DisiplinKontak:
+      type: object
+      properties:
+        nama: { type: string, example: Bimo Rajendra }
+        email: { type: string, example: staf.jb@teralur.test }
+
+    DisiplinBerkas:
+      type: object
+      properties:
+        id: { type: string, format: uuid, description: id dokumen }
+        jenis:
+          type: string
+          enum: [bukti_awal, bukti_pendukung, kelengkapan, bap, tanggapan_pegawai, bukti_tambahan, salinan_keputusan, bukti_penyampaian, laporan_pelaksanaan]
+        nama_asli: { type: string, example: BAP-DSP-2026-0007.pdf }
+        mime_type: { type: string, example: application/pdf }
+        ukuran: { type: integer }
+        url: { type: string, example: /api/disiplin/5c2f6a8e-0000-0000-0000-000000000000/dokumen/7d1e0000-0000-0000-0000-000000000000 }
+        created_at: { type: string, format: date-time }
+
+    DisiplinKasus:
+      type: object
+      description: |
+        Untuk `operator_sekolah`, field `pemeriksaan`, `rekomendasi`, `keputusan_pimpinan`, `tindak_lanjut`,
+        `riwayat_hukuman`, butir daftar periksa verifikasi, dan berkas internal tidak dikirim; `catatan` riwayat hanya
+        terisi untuk transisi yang ditujukan ke sekolah. Di daftar (`GET /api/disiplin`) hanya ringkasan yang dikirim,
+        dan untuk `pimpinan` tanpa `pendidik` (identitas guru hanya di halaman kasus, Figma B1).
+      properties:
+        id: { type: string, format: uuid }
+        nomor: { type: string, example: DSP-2026-0007 }
+        status: { $ref: "#/components/schemas/DisiplinStatus" }
+        tahap: { type: string, example: Rekomendasi hukuman, description: Label tahap untuk rekap DS9 }
+        tenggat: { type: [string, "null"], format: date, description: Tenggat tahap berjalan }
+        jenis_pelanggaran: { $ref: "#/components/schemas/DisiplinJenisPelanggaran" }
+        jenis_pelanggaran_label: { type: string, example: Ketidakhadiran tanpa keterangan }
+        uraian: { type: string }
+        kronologi:
+          type: array
+          items:
+            type: object
+            properties:
+              tanggal: { type: string, format: date, example: "2026-03-13" }
+              kejadian: { type: string, example: Tidak hadir tanpa keterangan 3 hari kerja }
+        pendidik:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            nama: { type: string }
+            nip: { type: [string, "null"] }
+            status_kepegawaian: { $ref: "#/components/schemas/StatusKepegawaian" }
+            pangkat: { type: string }
+            golongan: { type: string }
+            jabatan: { type: string }
+        sekolah:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            npsn: { type: string }
+            nama: { type: string }
+        pelapor: { $ref: "#/components/schemas/DisiplinKontak" }
+        berkas:
+          type: array
+          items: { $ref: "#/components/schemas/DisiplinBerkas" }
+        verifikasi:
+          type: object
+          properties:
+            keputusan: { type: string, enum: [layak, perlu_kelengkapan, tidak_layak] }
+            catatan: { type: string, description: Daftar kekurangan atau alasan tidak layak }
+            batas_kelengkapan: { type: [string, "null"], format: date }
+            identitas_sesuai: { type: boolean }
+            kronologi_jelas: { type: boolean }
+            bukti_memadai: { type: boolean }
+            dalam_kewenangan: { type: boolean }
+            oleh: { $ref: "#/components/schemas/DisiplinKontak" }
+            at: { type: [string, "null"], format: date-time }
+        tanggapan_sekolah: { type: string }
+        dilengkapi_at: { type: [string, "null"], format: date-time }
+        pemeriksaan:
+          type: object
+          properties:
+            nomor_surat_panggilan: { type: string, example: e-0412/KP.03.02 }
+            waktu_pemeriksaan: { type: [string, "null"], format: date-time }
+            ringkasan_pemeriksaan: { type: string }
+        rekomendasi:
+          type: object
+          properties:
+            ringkasan_fakta: { type: string }
+            dugaan_terbukti: { type: string }
+            dasar_hukum: { type: string }
+            tingkat: { $ref: "#/components/schemas/DisiplinTingkat" }
+            jenis_hukuman: { $ref: "#/components/schemas/DisiplinJenisHukuman" }
+            jenis_hukuman_label: { type: string }
+            justifikasi: { type: string }
+            oleh: { $ref: "#/components/schemas/DisiplinKontak" }
+            at: { type: [string, "null"], format: date-time }
+        keputusan_pimpinan:
+          type: object
+          properties:
+            keputusan: { type: string, enum: [setujui, ubah, kembalikan] }
+            catatan: { type: string }
+            oleh: { $ref: "#/components/schemas/DisiplinKontak" }
+            at: { type: [string, "null"], format: date-time }
+        hukuman:
+          type: object
+          description: Terisi sejak pimpinan menetapkan sanksi; data surat keputusan terisi setelah dicatat Sudin.
+          properties:
+            tingkat: { $ref: "#/components/schemas/DisiplinTingkat" }
+            jenis_hukuman: { $ref: "#/components/schemas/DisiplinJenisHukuman" }
+            jenis_hukuman_label: { type: string, example: Pemotongan tunjangan kinerja 25% selama 6 bulan }
+            nomor_keputusan: { type: string, example: e-0587/KP.04.01 }
+            tanggal_keputusan: { type: [string, "null"], format: date }
+            masa_mulai: { type: [string, "null"], format: date }
+            masa_selesai: { type: [string, "null"], format: date }
+        tindak_lanjut:
+          type: object
+          properties:
+            tanggal_diterima_pegawai: { type: [string, "null"], format: date }
+            dicatat_idis: { type: boolean }
+            idis_oleh: { $ref: "#/components/schemas/DisiplinKontak" }
+            idis_at: { type: [string, "null"], format: date-time }
+            upaya_administratif: { type: string, enum: ["", tidak_ada, ada] }
+            catatan_upaya: { type: string }
+            ditutup_at: { type: [string, "null"], format: date-time }
+        catatan_pelaksanaan: { type: string }
+        pelaksanaan_at: { type: [string, "null"], format: date-time }
+        petugas_sudin: { $ref: "#/components/schemas/DisiplinKontak" }
+        riwayat_hukuman:
+          type: array
+          description: Kasus lain pegawai yang sama yang sudah dijatuhi hukuman (dalam wilayah pembaca)
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              nomor: { type: string }
+              tingkat: { $ref: "#/components/schemas/DisiplinTingkat" }
+              jenis_hukuman_label: { type: string }
+              tanggal_keputusan: { type: [string, "null"], format: date }
+        riwayat:
+          type: array
+          items:
+            type: object
+            properties:
+              dari_status: { type: string }
+              ke_status: { $ref: "#/components/schemas/DisiplinStatus" }
+              oleh_nama: { type: string }
+              catatan: { type: string }
+              created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    DisiplinRingkasan:
+      type: object
+      properties:
+        per_status:
+          type: object
+          additionalProperties: { type: integer }
+          example: { registrasi: 1, perlu_kelengkapan: 1, pemeriksaan: 2, menunggu_keputusan: 1, sanksi_ditetapkan: 0, tindak_lanjut: 1, selesai: 2, tidak_dilanjutkan: 1 }
+        perlu_tindakan: { type: integer, description: "registrasi + pemeriksaan + sanksi_ditetapkan", example: 3 }
+        menunggu_keputusan: { type: integer, example: 1 }
+        tenggat_dekat:
+          type: array
+          description: Nomor kasus belum final dengan tenggat ≤ 5 hari kerja (termasuk yang lewat)
+          items: { type: string, example: DSP-2026-0005 }
+
+    # fragmen: surat
+    JenisSurat:
+      type: string
+      enum: [tunjangan, aktif_mengajar, pengantar_kenaikan_pangkat, izin_cuti, pengantar_pensiun]
+
+    StatusSurat:
+      type: string
+      enum: [draf, menunggu_ttd, final, dibatalkan]
+
+    SuratJenisItem:
+      type: object
+      properties:
+        kode: { $ref: "#/components/schemas/JenisSurat" }
+        label: { type: string, example: Surat keterangan aktif mengajar }
+        deskripsi: { type: string, example: Menerangkan guru aktif mengajar di satuan pendidikan tertentu. }
+
+    SuratIsian:
+      type: object
+      required: [perihal, tanggal_surat]
+      properties:
+        perihal: { type: string, maxLength: 300, example: Keterangan aktif mengajar untuk pengurusan tunjangan profesi }
+        tanggal_surat: { type: string, format: date, example: "2027-02-03" }
+        nomor:
+          type: string
+          maxLength: 50
+          description: Kosongkan untuk nomor urut otomatis `NNNN/PK.01.02/<tahun tanggal surat>`. Dicek unik (409 bila dipakai).
+          example: 0188/PK.01.02/2027
+        keterangan:
+          type: string
+          maxLength: 2000
+          example: Yang bersangkutan benar aktif mengajar mata pelajaran IPA sebanyak 24 jam pelajaran per minggu.
+
+    SuratBuatRequest:
+      allOf:
+        - type: object
+          required: [jenis, pendidik_id]
+          properties:
+            jenis: { $ref: "#/components/schemas/JenisSurat" }
+            pendidik_id: { type: string, format: uuid }
+        - $ref: "#/components/schemas/SuratIsian"
+
+    Surat:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nomor: { type: string, example: 0188/PK.01.02/2027 }
+        jenis: { $ref: "#/components/schemas/JenisSurat" }
+        jenis_label: { type: string, example: Surat keterangan aktif mengajar }
+        status: { $ref: "#/components/schemas/StatusSurat" }
+        perihal: { type: string }
+        tanggal_surat: { type: string, format: date }
+        keterangan: { type: string }
+        kop: { type: string, example: Suku Dinas Pendidikan Kota Administrasi Jakarta Barat }
+        penanda_tangan: { type: string, example: Kepala Suku Dinas Pendidikan Kota Administrasi Jakarta Barat }
+        pendidik:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            nama: { type: string }
+            nip: { type: [string, "null"] }
+            status_kepegawaian: { $ref: "#/components/schemas/StatusKepegawaian" }
+            pangkat: { type: string }
+            golongan: { type: string }
+            jabatan: { type: string }
+            jabatan_dapodik: { type: string }
+        sekolah:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            npsn: { type: string }
+            nama: { type: string }
+        dokumen:
+          description: PDF buatan sistem untuk dicetak (ada sejak `menunggu_ttd`)
+          allOf: [{ $ref: "#/components/schemas/Dokumen" }]
+        dokumen_ttd:
+          description: Hasil pindai surat bertanda tangan (ada saat `final`)
+          allOf: [{ $ref: "#/components/schemas/Dokumen" }]
+        final_at: { type: [string, "null"], format: date-time }
+        diserahkan_at: { type: [string, "null"], format: date-time }
+        alasan_batal: { type: string }
+        riwayat:
+          type: array
+          description: Hanya di endpoint detail, urut dari yang terlama
+          items:
+            type: object
+            properties:
+              dari_status: { type: string }
+              ke_status: { $ref: "#/components/schemas/StatusSurat" }
+              oleh: { type: string, format: uuid }
+              oleh_nama: { type: string }
+              catatan: { type: string }
+              created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    # fragmen: anjab
+    AnjabStatus:
+      type: string
+      enum: [draf, dikirim, dikembalikan, ditetapkan]
+
+    AnjabBeban:
+      type: object
+      required: [jenjang, mapel, tingkat, jp]
+      properties:
+        jenjang: { type: string, enum: [SD, SMP, SMA, SMK] }
+        mapel: { type: string, maxLength: 100, example: IPA }
+        tingkat: { type: integer, minimum: 1, maximum: 12, example: 7, description: "SD 1–6, SMP 7–9, SMA/SMK 10–12" }
+        jp: { type: integer, minimum: 0, maximum: 40, example: 5, description: JP per rombel per minggu }
+
+    AnjabPeriodeRequest:
+      type: object
+      required: [tahun_ajaran, jenjang, tanggal_buka, tanggal_tutup, jam_wajib, rasio_sd, rasio_smp, rasio_sma, batas_tmt_pensiun]
+      properties:
+        tahun_ajaran: { type: string, pattern: "^[0-9]{4}/[0-9]{4}$", example: 2026/2027 }
+        jenjang:
+          type: array
+          minItems: 1
+          maxItems: 4
+          items: { type: string, enum: [SD, SMP, SMA, SMK] }
+        tanggal_buka: { type: string, format: date, example: "2026-11-17" }
+        tanggal_tutup: { type: string, format: date, example: "2026-12-05" }
+        acuan_peraturan: { type: string, maxLength: 200, example: Pergub DKI No. 00 Tahun 2026 }
+        jam_wajib: { type: integer, minimum: 1, maximum: 60, example: 24, description: JP wajib mengajar per minggu }
+        rasio_sd: { type: integer, minimum: 1, maximum: 100, example: 28, description: Siswa per rombel SD }
+        rasio_smp: { type: integer, minimum: 1, maximum: 100, example: 32 }
+        rasio_sma: { type: integer, minimum: 1, maximum: 100, example: 36, description: Berlaku untuk SMA dan SMK }
+        batas_tmt_pensiun:
+          type: string
+          format: date
+          example: "2027-07-31"
+          description: Guru dengan TMT pensiun pada atau sebelum tanggal ini tidak dihitung tersedia
+        beban:
+          type: array
+          maxItems: 600
+          items: { $ref: "#/components/schemas/AnjabBeban" }
+
+    AnjabPeriode:
+      allOf:
+        - $ref: "#/components/schemas/AnjabPeriodeRequest"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            sudin_id: { type: string, format: uuid }
+            terkunci: { type: boolean, description: true setelah masa pembaruan dibuka }
+            dibuka_at: { type: [string, "null"], format: date-time }
+            progres:
+              type: object
+              description: Hanya di detail. Jumlah sekolah per status.
+              example: { draf: 24, dikirim: 11, dikembalikan: 3, ditetapkan: 4, total: 42 }
+              additionalProperties: { type: integer }
+            created_at: { type: string, format: date-time }
+
+    AnjabBarisMapel:
+      type: object
+      properties:
+        mapel: { type: string, example: IPA }
+        kebutuhan: { type: integer, example: 3 }
+        tersedia: { type: integer, example: 2 }
+        selisih: { type: integer, example: -1, description: "tersedia - kebutuhan; negatif = kurang" }
+
+    AnjabVersiHasil:
+      type: object
+      properties:
+        mapel: { type: array, items: { $ref: "#/components/schemas/AnjabBarisMapel" } }
+        kurang: { type: integer, example: 3 }
+        lebih: { type: integer, example: 2 }
+
+    AnjabHasil:
+      type: object
+      properties:
+        guru_total: { type: integer, example: 48 }
+        guru_dihitung: { type: integer, example: 47 }
+        guru_pensiun: { type: integer, example: 1 }
+        total_rombel: { type: integer, example: 27 }
+        total_siswa: { type: integer, example: 851 }
+        rombel:
+          type: array
+          items:
+            type: object
+            properties:
+              tingkat: { type: integer, example: 7 }
+              jumlah_rombel: { type: integer, example: 9 }
+              jumlah_siswa: { type: integer, example: 288 }
+              rata_rata: { type: number, example: 32.0 }
+              rombel_dihitung: { type: integer, example: 9 }
+        versi_sk: { $ref: "#/components/schemas/AnjabVersiHasil" }
+        versi_riil: { $ref: "#/components/schemas/AnjabVersiHasil" }
+        perbedaan:
+          type: array
+          description: Guru yang mapel riilnya berbeda dari mapel SK
+          items:
+            type: object
+            properties:
+              nama: { type: string, example: "Dewi Anggraini, S.Pd.Gr." }
+              mapel_sk: { type: string, example: Bahasa Indonesia }
+              mapel_riil: { type: string, example: Prakarya }
+
+    AnjabGuru:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        pendidik_id: { type: string, format: uuid }
+        nama: { type: string }
+        nip: { type: [string, "null"] }
+        status_kepegawaian: { $ref: "#/components/schemas/StatusKepegawaian" }
+        golongan: { type: string }
+        mapel_sk: { type: string, example: Bahasa Indonesia }
+        mapel_riil: { type: string, example: Prakarya }
+        jp_riil: { type: integer, example: 24 }
+        tmt_pensiun: { type: [string, "null"], format: date }
+        dihitung: { type: boolean, description: false bila TMT pensiun pada atau sebelum batas periode }
+
+    AnjabSekolah:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        periode_id: { type: string, format: uuid }
+        tahun_ajaran: { type: string, example: 2026/2027 }
+        tenggat: { type: string, format: date }
+        sekolah:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            npsn: { type: string }
+            nama: { type: string }
+            jenjang: { type: string }
+            kecamatan: { type: string }
+        status: { $ref: "#/components/schemas/AnjabStatus" }
+        kiriman_ke: { type: integer, example: 2 }
+        dikirim_at: { type: [string, "null"], format: date-time }
+        catatan_sudin: { type: string }
+        ditinjau_at: { type: [string, "null"], format: date-time }
+        jumlah_rombel: { type: integer, example: 27 }
+        jumlah_guru: { type: integer, example: 48 }
+        rombel:
+          type: array
+          description: Hanya di detail
+          items:
+            type: object
+            properties:
+              tingkat: { type: integer }
+              jumlah_rombel: { type: integer }
+              jumlah_siswa: { type: integer }
+        guru:
+          type: array
+          description: Hanya di detail
+          items: { $ref: "#/components/schemas/AnjabGuru" }
+        hasil:
+          description: Hanya di detail. Dibekukan saat ditetapkan; sebelumnya dihitung dari data terkini.
+          allOf: [{ $ref: "#/components/schemas/AnjabHasil" }]
+        riwayat:
+          type: array
+          description: Hanya di detail, urut dari yang terlama
+          items:
+            type: object
+            properties:
+              dari_status: { type: string }
+              ke_status: { $ref: "#/components/schemas/AnjabStatus" }
+              oleh_nama: { type: string }
+              catatan: { type: string }
+              created_at: { type: string, format: date-time }
+
+    AnjabImporHasil:
+      type: object
+      properties:
+        nama_berkas: { type: string, example: master_anjab_2026-2027.xlsx }
+        total_baris: { type: integer, example: 412 }
+        baris_valid: { type: integer, example: 405 }
+        baris_bermasalah: { type: integer, example: 7 }
+        valid_per_lembar:
+          type: object
+          additionalProperties: { type: integer }
+          example: { Sekolah: 42, Rombel: 180, Guru: 183 }
+        galat:
+          type: array
+          items:
+            type: object
+            properties:
+              baris: { type: integer, example: 14, description: Nomor baris di Excel }
+              lembar: { type: string, enum: [Sekolah, Rombel, Guru] }
+              kolom: { type: string, example: TMT CPNS }
+              nilai: { type: string, example: 2010/31/01 }
+              masalah: { type: string, example: format tanggal harus YYYY-MM-DD }
+        tersimpan: { type: boolean }
+
+    AnjabMonitoring:
+      type: object
+      properties:
+        periode_id: { type: string, format: uuid }
+        tahun_ajaran: { type: string }
+        total_sekolah: { type: integer, example: 42 }
+        sekolah_ditetapkan: { type: integer, example: 38 }
+        kekurangan_guru: { type: integer, description: Jumlah kurang (versi riil) di sekolah yang ditetapkan }
+        kelebihan_guru: { type: integer }
+        rekomendasi:
+          type: array
+          items:
+            type: object
+            properties:
+              mapel: { type: string, example: PJOK }
+              dari:
+                type: object
+                properties:
+                  sekolah_id: { type: string, format: uuid }
+                  nama: { type: string, example: SMP Negeri 45 Jakarta }
+                  kecamatan: { type: string, example: Kebon Jeruk }
+                  jumlah: { type: integer, example: 1, description: Kelebihan di sekolah asal }
+              ke:
+                type: object
+                properties:
+                  sekolah_id: { type: string, format: uuid }
+                  nama: { type: string, example: SMP Negeri 89 Jakarta }
+                  kecamatan: { type: string, example: Kalideres }
+                  jumlah: { type: integer, example: 2, description: Kekurangan di sekolah tujuan }
+              jumlah: { type: integer, example: 1, description: Guru yang disarankan dipindah }
+              kecamatan_sama: { type: boolean }
+        sekolah:
+          type: array
+          items:
+            type: object
+            properties:
+              anjab_sekolah_id: { type: string, format: uuid }
+              sekolah: { type: object }
+              status: { $ref: "#/components/schemas/AnjabStatus" }
+              kurang: { type: integer }
+              lebih: { type: integer }
+
+    # fragmen: dapodik
+    DapodikJenis:
+      type: string
+      enum: [revisi_akun_operator, autentikasi_ptk, kode_referral_yayasan, perbaikan_data_ptk, lainnya]
+
+    DapodikStatus:
+      type: string
+      enum: [baru, perlu_info_tambahan, selesai]
+
+    DapodikTiket:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nomor: { type: string, example: DPK-2026-0192 }
+        jenis: { $ref: "#/components/schemas/DapodikJenis" }
+        status: { $ref: "#/components/schemas/DapodikStatus" }
+        isian:
+          type: object
+          additionalProperties: { type: string }
+          example: { nama_operator_baru: "Rizky Pratama Nugraha, S.Kom.", email_operator_baru: rizky.pratama@example.com }
+        uraian: { type: string }
+        tenggat: { type: string, format: date }
+        terlambat: { type: boolean, description: Tenggat sudah lewat dan tiket belum selesai }
+        pengaju_nama: { type: string, example: Dedi Kurniawan }
+        sekolah:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            npsn: { type: string }
+            nama: { type: string }
+            kecamatan: { type: string }
+        pendidik:
+          type: object
+          description: PTK terkait, bila ada
+          properties:
+            id: { type: string, format: uuid }
+            nama: { type: string }
+            nip: { type: [string, "null"] }
+            status_kepegawaian: { $ref: "#/components/schemas/StatusKepegawaian" }
+            jabatan: { type: string }
+        permintaan_info: { type: string, description: Permintaan info tambahan terakhir dari Sudin }
+        balasan_info: { type: string, description: Balasan terakhir operator }
+        catatan_penyelesaian: { type: string }
+        penyelesai_nama: { type: string }
+        diselesaikan_at: { type: [string, "null"], format: date-time }
+        lampiran:
+          type: array
+          description: Hanya di endpoint detail, urut dari yang terlama
+          items:
+            type: object
+            properties:
+              tahap: { type: string, enum: [pengajuan, info_tambahan] }
+              dokumen: { $ref: "#/components/schemas/Dokumen" }
+        riwayat:
+          type: array
+          description: Hanya di endpoint detail, urut dari yang terlama
+          items:
+            type: object
+            properties:
+              dari_status: { type: string }
+              ke_status: { $ref: "#/components/schemas/DapodikStatus" }
+              oleh: { type: string, format: uuid }
+              oleh_nama: { type: string }
+              catatan: { type: string }
+              created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    # fragmen: kinerja_p3k
+    KinerjaStatus:
+      type: string
+      enum: [draf, menunggu_ttd, final]
+
+    KinerjaNilai:
+      type: object
+      description: Nilai BerAKHLAK skala 1–5; null = belum diisi
+      properties:
+        berorientasi_pelayanan: { type: [integer, "null"], minimum: 1, maximum: 5, example: 4 }
+        akuntabel: { type: [integer, "null"], minimum: 1, maximum: 5, example: 4 }
+        kompeten: { type: [integer, "null"], minimum: 1, maximum: 5, example: 5 }
+        harmonis: { type: [integer, "null"], minimum: 1, maximum: 5, example: 4 }
+        loyal: { type: [integer, "null"], minimum: 1, maximum: 5, example: 4 }
+        adaptif: { type: [integer, "null"], minimum: 1, maximum: 5, example: 4 }
+        kolaboratif: { type: [integer, "null"], minimum: 1, maximum: 5, example: 5 }
+
+    KinerjaPenilaian:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nomor: { type: string, example: P3K-2026-0112 }
+        status: { $ref: "#/components/schemas/KinerjaStatus" }
+        tahun: { type: integer, example: 2026 }
+        semester: { type: integer, enum: [1, 2] }
+        periode: { type: string, example: "Semester 2 · Juli–Desember 2026" }
+        pendidik:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            nama: { type: string, example: Yusuf Maulana }
+            nip: { type: [string, "null"] }
+            status_kepegawaian: { $ref: "#/components/schemas/StatusKepegawaian" }
+            jabatan: { type: string, example: Tenaga Administrasi }
+        sekolah:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            npsn: { type: string }
+            nama: { type: string }
+            kecamatan: { type: string }
+        nilai: { $ref: "#/components/schemas/KinerjaNilai" }
+        parameter_terisi: { type: integer, example: 7 }
+        nilai_akhir: { type: [number, "null"], example: 4.3, description: Rata-rata parameter terisi, 1 desimal }
+        predikat: { type: string, enum: ["", Sangat kurang, Kurang, Cukup, Baik, Sangat baik], example: Baik }
+        dokumen_sistem: { $ref: "#/components/schemas/Dokumen" }
+        dokumen_dibuat_at: { type: [string, "null"], format: date-time }
+        dokumen_ttd: { $ref: "#/components/schemas/Dokumen" }
+        difinalkan_at: { type: [string, "null"], format: date-time }
+        riwayat:
+          type: array
+          description: Hanya di endpoint detail, urut dari yang terlama
+          items:
+            type: object
+            properties:
+              dari_status: { type: string }
+              ke_status: { $ref: "#/components/schemas/KinerjaStatus" }
+              oleh: { type: string, format: uuid }
+              oleh_nama: { type: string }
+              catatan: { type: string }
+              created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    KinerjaPegawai:
+      type: object
+      properties:
+        pendidik:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            nama: { type: string }
+            nip: { type: [string, "null"] }
+            status_kepegawaian: { $ref: "#/components/schemas/StatusKepegawaian" }
+            jabatan: { type: string }
+        sekolah:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            npsn: { type: string }
+            nama: { type: string }
+            kecamatan: { type: string }
+        penilaian:
+          type: [object, "null"]
+          properties:
+            id: { type: string, format: uuid }
+            nomor: { type: string }
+            status: { $ref: "#/components/schemas/KinerjaStatus" }
+            nilai_akhir: { type: [number, "null"] }
+            predikat: { type: string }
+
+    # fragmen: arsip
+    ArsipKategori:
+      type: string
+      enum: [sk, tunjangan, ijazah, kinerja, surat, lainnya]
+    Arsip:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        pendidik_id: { type: string, format: uuid }
+        pendidik_nama: { type: string }
+        pendidik_nip: { type: [string, "null"] }
+        sekolah_id: { type: string, format: uuid }
+        sekolah_nama: { type: string }
+        kategori: { $ref: "#/components/schemas/ArsipKategori" }
+        jenis_dokumen: { type: string }
+        nomor: { type: string }
+        tanggal_dokumen: { type: [string, "null"], format: date }
+        keterangan: { type: string }
+        versi_terkini: { type: integer }
+        sumber_modul: { type: string, description: "Kosong untuk unggahan manual; mis. cuti, pensiun, kenaikan_pangkat, surat, kinerja" }
+        diunggah_oleh: { type: string, example: "Sistem · modul cuti" }
+        url: { type: string, example: "/api/arsip/{id}/unduh" }
+        versi:
+          type: array
+          description: Hanya di endpoint detail, terbaru dulu
+          items:
+            type: object
+            properties:
+              versi: { type: integer }
+              catatan: { type: string }
+              diunggah_oleh: { type: string }
+              dokumen:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  nama_asli: { type: string }
+                  mime_type: { type: string }
+                  ukuran: { type: integer }
+              lampiran: { type: [object, "null"] }
+              url: { type: string }
+              created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ArsipLog:
+      type: object
+      properties:
+        waktu: { type: string, format: date-time }
+        aksi: { type: string, enum: [melihat, mengunduh, mengunggah, mengganti_versi] }
+        versi: { type: integer }
+        keterangan: { type: string }
+        pengguna: { type: string }
+        peran: { type: string }
+        arsip_id: { type: string, format: uuid }
+        jenis_dokumen: { type: string }
+        nomor: { type: string }
+        pendidik_nama: { type: string }
+
+    # fragmen: dasbor
+    DasborModul:
+      type: string
+      enum: [cuti, pensiun, kenaikan_pangkat, disiplin, dapodik, kinerja, surat, anjab]
+    DasborTugas:
+      type: object
+      properties:
+        modul: { $ref: "#/components/schemas/DasborModul" }
+        modul_label: { type: string }
+        id: { type: string, format: uuid }
+        nomor: { type: string }
+        pegawai: { type: [string, "null"] }
+        sekolah: { type: string }
+        status: { type: string }
+        tindakan: { type: string, example: Periksa berkas digital }
+        kategori: { type: string, enum: [perlu_tindakan, menunggu_fisik, menunggu_ttd] }
+        tenggat: { type: string, format: date }
+        sisa_hari: { type: integer, description: "Negatif = terlewat" }
+        tautan: { type: string, example: "/cuti/{id}" }
+    DasborPengajuan:
+      type: object
+      properties:
+        modul: { $ref: "#/components/schemas/DasborModul" }
+        modul_label: { type: string }
+        id: { type: string, format: uuid }
+        nomor: { type: string }
+        pegawai: { type: [string, "null"] }
+        sekolah: { type: string }
+        status: { type: string }
+        kelompok: { type: string, enum: [perlu_perbaikan, menunggu_surat_fisik, diproses, selesai] }
+        diajukan: { type: string, format: date-time }
+        diperbarui: { type: string, format: date-time }
+        tautan: { type: string }
+    DasborStatModul:
+      type: object
+      properties:
+        kode: { type: string }
+        label: { type: string }
+        total: { type: integer }
+        selesai: { type: integer }
+        per_status: { type: object, additionalProperties: { type: integer } }
+        rata_hari: { type: [number, "null"], description: Rata-rata hari dari masuk sampai selesai }
+    DasborRingkasan:
+      type: object
+      properties:
+        bulan: { type: string, example: "2026-10" }
+        modul: { type: array, items: { $ref: "#/components/schemas/DasborStatModul" } }
+        semua: { $ref: "#/components/schemas/DasborStatModul" }
+        tren:
+          type: array
+          description: Pengajuan masuk 6 bulan terakhir
+          items:
+            type: object
+            properties:
+              bulan: { type: string }
+              jumlah: { type: integer }
+        anjab:
+          type: [object, "null"]
+          properties:
+            tahun_ajaran: { type: string }
+            tanggal_tutup: { type: string, format: date }
+            total: { type: integer }
+            ditetapkan: { type: integer }
+            per_status: { type: object, additionalProperties: { type: integer } }

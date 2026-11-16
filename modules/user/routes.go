@@ -19,4 +19,6 @@ func RegisterRoutes(server *gin.Engine, injector *do.Injector) {
 	r := server.Group("/api/user", middlewares.Authenticate(jwtService), middlewares.Authorize(db))
 	r.GET("/me", userController.Me)
 	r.PUT("/me/password", userController.GantiPassword)
+	r.GET("/me/riwayat-masuk", userController.RiwayatMasuk)
+	r.POST("/me/keluar-sesi-lain", userController.KeluarSesiLain)
 }

@@ -13,6 +13,8 @@ type Sekolah struct {
 	Jenjang   string    `gorm:"type:varchar(10);not null" json:"jenjang"`
 	Kecamatan string    `gorm:"type:varchar(100)" json:"kecamatan"`
 	Alamat    string    `gorm:"type:text" json:"alamat"`
+	// Nama kepala sekolah untuk profil sekolah (H5); diubah oleh Sudin.
+	KepalaSekolah string `gorm:"type:varchar(150)" json:"kepala_sekolah"`
 
 	Sudin *Sudin `gorm:"foreignKey:SudinID;constraint:OnDelete:RESTRICT" json:"sudin,omitempty"`
 
